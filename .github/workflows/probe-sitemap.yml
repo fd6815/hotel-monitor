@@ -1,0 +1,11 @@
+name: 測試 sitemap
+on: workflow_dispatch
+jobs:
+  t:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
+          for u in https://www.marriott.com/robots.txt https://www.marriott.com/sitemap.xml https://www.ihg.com/robots.txt https://www.ihg.com/sitemap.xml https://www.ihg.com/sitemapindex.xml; do
+            echo "=== $u"; curl -sSL -A "$UA" -m 30 -o /tmp/o -w "%{http_code} %{size_download}\n" "$u"; head -c 1500 /tmp/o; echo
+          done
