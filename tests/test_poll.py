@@ -174,4 +174,19 @@ poll({"id": "r8", "type": "open", "chains": ["marriott"], "t": 0})
 assert set(captured) == {"b"} and len(captured["b"]) == 1, captured
 
 test_collect()
+
+# lock：程序還在才算忙；程序被中斷留下的 lock 不擋；舊格式依時間判斷
+import os, subprocess
+lk = tmp / "lk"
+assert not run.lock_busy(lk)
+lk.write_text(str(os.getpid()))
+assert run.lock_busy(lk)
+child = subprocess.Popen([sys.executable, "-c", "pass"])
+child.wait()
+lk.write_text(str(child.pid))
+assert not run.lock_busy(lk)
+lk.write_text("watch")
+assert run.lock_busy(lk)
+os.utime(lk, (0, 0))
+assert not run.lock_busy(lk)
 print("poll 測試全部通過")

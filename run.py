@@ -160,10 +160,10 @@ def main():
     lock = Path(cfg.get("data_dir", "data")) / "run.lock"
     if a.cmd in ("daily", "watch"):
         lock.parent.mkdir(parents=True, exist_ok=True)
-        if lock.exists() and time.time() - lock.stat().st_mtime < 90 * 60:
+        if lock_busy(lock):
             print("另一個抓取還在執行，這次略過")
             return
-        lock.write_text(a.cmd)
+        lock.write_text(str(os.getpid()))
     try:
         run_cmd(a, cfg, db, hotels, by_id)
     finally:
@@ -235,12 +235,23 @@ def request_targets(r, cfg, hotels, by_id, today):
     return {k: v for k, v in t.items() if v}
 
 
+def lock_busy(lock):
+    """有抓取正在執行。程序被中斷時不會清 lock，所以檢查寫 lock 的程序是否還在；最多等 90 分鐘。"""
+    if not lock.exists() or time.time() - lock.stat().st_mtime >= 90 * 60:
+        return False
+    pid = lock.read_text().strip()
+    if not pid.isdigit() or os.name != "nt":
+        return True
+    r = subprocess.run(["tasklist", "/FI", f"PID eq {pid}", "/NH", "/FO", "CSV"], capture_output=True, text=True,
+                       creationflags=subprocess.CREATE_NO_WINDOW)
+    return f'"{pid}"' in r.stdout
+
+
 def poll(a, cfg, db, hotels, by_id, pending):
-    now = time.time()
     lock = Path(cfg.get("data_dir", "data")) / "run.lock"
-    if lock.exists() and now - lock.stat().st_mtime < 90 * 60:
+    if lock_busy(lock):
         return   # 排程正在跑，下一分鐘再來
-    lock.write_text("poll")
+    lock.write_text(str(os.getpid()))
     try:
         today = date.today()
         wait = {c for c, t in alerts.blocked_chains(db).items() if t > datetime.now()}
