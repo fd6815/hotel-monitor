@@ -515,7 +515,10 @@ function renderStatus(){
     const p = PENDING[PENDING.length-1], mins = Math.max(0, Math.round((Date.now()-p.t)/60000));
     const what = p.type==="open" ? "開頁更新" : p.type==="daily" ? "完整更新" : `${hotelName(p.hotel)} ${p.month.replace("-"," 年 ")} 月`;
     el.className = "status busy";
-    el.innerHTML = `<span class="dot"></span>更新中：${esc(what)}（已送出 ${mins} 分鐘${p.type==="daily"?"":"，萬豪一個月約需 8 分鐘"}）`;
+    const blk = DATA.blocked||[];
+    el.innerHTML = blk.length
+      ? `<span class="dot"></span>${esc(what)}：${blk.map(b=>`${esc(b.chain)}暫時封鎖，約 ${esc(b.retry)} 自動重試`).join("、")}`
+      : `<span class="dot"></span>更新中：${esc(what)}（已送出 ${mins} 分鐘${p.type==="daily"?"":"，萬豪一個月約需 8 分鐘"}）`;
   } else if (curHotel && monthNeedsFetch(curHotel, curMonth)) {
     el.className = "status";
     el.innerHTML = token() ? "這個月還沒查過" : `這個月還沒查過，<a href="#" id="needTok">設定 token</a> 後切換月份會自動查詢`;
@@ -570,7 +573,9 @@ let watchTimer = null;
 function watchPending(){
   if (watchTimer || !PENDING.length) return;
   watchTimer = setInterval(async ()=>{
-    PENDING = PENDING.filter(p => Date.now()-p.t < 6*3600*1000);
+    const live = PENDING.filter(p => Date.now()-p.t < 6*3600*1000);
+    if (live.length < PENDING.length) toast("更新逾時：電腦沒開機或官網仍在封鎖");
+    PENDING = live;
     if (!PENDING.length){ clearInterval(watchTimer); watchTimer=null; savePending(); renderStatus(); return; }
     try {
       const r = await fetch("data.json?t="+Date.now(), {cache:"no-store"});
