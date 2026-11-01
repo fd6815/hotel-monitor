@@ -142,6 +142,21 @@ IHG_JS = """async ([d1, d2, code, adults, key, rate]) => {
 }"""
 
 
+MAR_CAL_QUERY = (Path(__file__).parent / "marriott_calendar.graphql").read_text(encoding="utf-8")
+MAR_CAL_SIG = "887375892e1ad2a43f46a9c95c55ea47cf6eca3af03331c2134f1b440cff3f9f"
+MAR_CAL_JS = """async ([code, start, end, adults, rtype, query, sig]) => {
+  const body = {operationName:"phoenixShopADFSearchProductsByProperty",
+    variables:{id:[code], search:{propertyId:code, options:{startDate:start, numberOfRooms:1,
+      rateRequestTypes:[{type:rtype}], endDate:end, numberInParty:adults, numberOfDays:1}}}, query};
+  const r = await fetch("/mi/query/phoenixShopADFSearchProductsByProperty", {method:"POST", credentials:"include",
+    headers:{"content-type":"application/json","accept":"*/*","accept-language":"en-US",
+      "apollographql-client-name":"phoenix_shop","apollographql-client-version":"v1","application-name":"shop",
+      "graphql-operation-name":"phoenixShopADFSearchProductsByProperty","graphql-operation-signature":sig,
+      "graphql-require-safelisting":"true"}, body:JSON.stringify(body)});
+  return {status:r.status, text: await r.text()};
+}"""
+
+
 def parse_ihg(hotel: dict, d: date, status: int, text: str) -> Quote:
     hid = hotel["id"]
     if status == 400 and "los" in text.lower():
@@ -195,6 +210,8 @@ class BrowserFetcher:
         self.debug_dir = Path(cfg.get("data_dir", "data")) / "debug"
         self.proc = None
         self.ihg_page = None
+        self.mar_page = None
+        self.mar_cash_broken = False
 
     async def __aenter__(self):
         from playwright.async_api import async_playwright
@@ -251,6 +268,66 @@ class BrowserFetcher:
         except Exception as e:  # noqa: BLE001
             await self._debug(self.page, hotel, d)
             return Quote(hotel["id"], d, None, None, "error", str(e)[:200])
+
+    async def marriott_range(self, hotel, dates):
+        """用萬豪價格月曆 API 一次查最多 35 天（點數＋現金）。失敗回傳 None，改用逐日開網頁。"""
+        if self.mar_page is None:
+            self.mar_page = await self.ctx.new_page()
+            await self.mar_page.goto("https://www.marriott.com/default.mi", wait_until="domcontentloaded", timeout=60000)
+            await self.mar_page.wait_for_timeout(5000)
+            if "access denied" in (await self.mar_page.title()).lower():
+                return None
+        want = sorted(set(dates))
+        adults = int(self.cfg.get("adults", 2))
+        points, cash = {}, {}
+        i = 0
+        while i < len(want):
+            start = want[i]
+            end = min(start + timedelta(days=34), want[-1])
+            for rtype, store in (("REDEMPTION", points), ("STANDARD", cash)):
+                if rtype == "STANDARD" and (hotel.get("cash") is False or self.mar_cash_broken):
+                    continue
+                res = await self.mar_page.evaluate(MAR_CAL_JS, [hotel["code"], start.isoformat(), end.isoformat(),
+                                                                adults, rtype, MAR_CAL_QUERY, MAR_CAL_SIG])
+                if res["status"] != 200:
+                    if rtype == "STANDARD":
+                        self.mar_cash_broken = True
+                        continue
+                    print(f"  [marriott] 月曆 API HTTP {res['status']}：{res['text'][:120]}")
+                    return None
+                try:
+                    j = json.loads(res["text"])
+                    edges = j["data"]["search"]["calendarSearchByProperty"]["edges"]
+                except Exception:  # noqa: BLE001
+                    if rtype == "STANDARD":
+                        self.mar_cash_broken = True
+                        print(f"  [marriott] 現金月曆無法解析：{res['text'][:150]}")
+                        continue
+                    print(f"  [marriott] 月曆回應異常：{res['text'][:150]}")
+                    return None
+                for e in edges:
+                    n = e["node"]
+                    rm = n.get("rateModes") or {}
+                    if rtype == "REDEMPTION":
+                        pts = (rm.get("pointsPerQuantity") or {}).get("points")
+                        if pts:
+                            store[n["startDate"]] = int(pts)
+                    else:
+                        a = (rm.get("lowestAverageRate") or {}).get("amount") or {}
+                        if a.get("amount") is not None:
+                            store[n["startDate"]] = (round(a["amount"] / 10 ** int(a.get("decimalPoint") or 0)),
+                                                     a.get("currency"))
+                await asyncio.sleep(random.uniform(2, 4))
+            i = next((k for k, d in enumerate(want) if d > end), len(want))
+        out = []
+        for d in want:
+            k = d.isoformat()
+            c, cu = cash.get(k, (None, None))
+            if k in points:
+                out.append(Quote(hotel["id"], d, points[k], "pts", "ok", cash=c, cash_unit=cu))
+            else:
+                out.append(Quote(hotel["id"], d, None, None, "sold_out", "無積分房", cash=c, cash_unit=cu))
+        return out
 
     async def _ihg(self, hotel, d):
         if self.ihg_page is None:

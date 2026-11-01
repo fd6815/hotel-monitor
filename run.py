@@ -80,6 +80,19 @@ async def collect(cfg, db, hotels, mode, fetch_day, targets=None):
             for h in hs:
                 res = []
                 dates = sorted(targets[h["id"]]) if targets is not None else target_dates(cfg, h, mode, db)
+                # 萬豪：先用價格月曆 API 一次查整段，失敗才逐日開網頁
+                if h["chain"] == "marriott" and hasattr(f, "marriott_range") and h.get("mode", "points") == "points":
+                    try:
+                        qs = await f.marriott_range(h, dates)
+                    except Exception as e:  # noqa: BLE001
+                        print(f"  [marriott] 月曆 API 失敗：{e!s:.120}")
+                        qs = None
+                    if qs is not None:
+                        for q in qs:
+                            db.save_quote(q, fetch_day)
+                            print(f"  {h['name']} {q.stay_date} {q.status} {q.price or ''} {q.note} {q.cash or ''}{q.cash_unit or ''}")
+                        results[h["id"]] = qs
+                        continue
                 denied = 0
                 for i, d in enumerate(dates, 1):
                     q = await f.fetch(h, d)

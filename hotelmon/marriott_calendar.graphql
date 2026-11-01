@@ -1,0 +1,60 @@
+query phoenixShopADFSearchProductsByProperty($search: CalendarSearchByPropertyInput!, $id: [ID!]!) {
+  search {
+    calendarSearchByProperty(search: $search) {
+      total
+      edges {
+        node {
+          endDate
+          startDate
+          rateModes {
+            lowestAverageRate {
+              amount {
+                currency
+                amount
+                decimalPoint
+                __typename
+              }
+              __typename
+            }
+            pointsPerQuantity {
+              points
+              __typename
+            }
+            totalRate {
+              amount {
+                amount
+                currency
+                decimalPoint
+                __typename
+              }
+              __typename
+            }
+            sourceOfRate
+            __typename
+          }
+          __typename
+        }
+        __typename
+      }
+      __typename
+    }
+    __typename
+  }
+  propertiesByIds(ids: $id) {
+    basicInformation {
+      isAdultsOnly
+      descriptions(
+        filter: [RESORT_FEE_DESCRIPTION, DESTINATION_FEE_DESCRIPTION, SURCHARGE_ORDINANCE_COST_DESCRIPTION]
+      ) {
+        type {
+          enumCode
+          __typename
+        }
+        __typename
+      }
+      resort
+      __typename
+    }
+    __typename
+  }
+}
