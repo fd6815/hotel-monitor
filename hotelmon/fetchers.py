@@ -150,6 +150,11 @@ class BrowserFetcher:
 
     async def _debug_shot(self, hotel, d):
         try:
+            t = (await self.page.inner_text("body"))[:700].replace("\n", " | ")
+            print(f"  [debug] {hotel['id']} {d} url={self.page.url}\n  [debug] title={await self.page.title()}\n  [debug] text={t}")
+        except Exception as e:  # noqa: BLE001
+            print(f"  [debug] 無法讀取頁面：{e}")
+        try:
             self.debug_dir.mkdir(parents=True, exist_ok=True)
             await self.page.screenshot(path=str(self.debug_dir / f"{hotel['id']}_{d}.png"))
         except Exception:  # noqa: BLE001
