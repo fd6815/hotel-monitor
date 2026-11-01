@@ -32,6 +32,11 @@
    "hotel": "ic-taipei",
    "date": "2026-12-06",
    "max_price": 64000
+  },
+  {
+   "hotel": "ic-taipei",
+   "date": "2026-12-05",
+   "max_price": 65000
   }
  ]
 }
