@@ -3,9 +3,36 @@
 2. 收藏飯店降價／新開：與前一次抓取比較，降幅 ≥ drop_min 或由搶空變有房
 3. 抓取失敗：某飯店當天全部失敗（多半是被擋或網頁改版）→ 通知一次
 """
-from datetime import date
+from datetime import date, datetime, timedelta
 
 from .fetchers import build_url
+
+BLOCK_MINUTES = 30   # 被官網擋之後，手機請求隔多久再重試
+
+
+def hotel_failed(results) -> bool:
+    """這次抓取算失敗：連 3 筆以上出錯（被官網擋、瀏覽器中途關閉），或全部日期都失敗；零星出錯不算。"""
+    errors = sum(q.status == "error" for q in results or [])
+    return errors > 0 and errors >= min(3, len(results))
+
+
+def update_blocks(db, hotels, results):
+    """記錄各集團是否被擋：有飯店失敗就暫停重試，全部成功就解除。"""
+    failed = {}
+    for h in hotels:
+        if results.get(h["id"]):
+            failed[h["chain"]] = failed.get(h["chain"], False) or hotel_failed(results[h["id"]])
+    for chain, bad in failed.items():
+        if bad:
+            db.mark_sent("blocked:" + chain)
+        else:
+            db.clear_sent("blocked:" + chain)
+
+
+def blocked_chains(db) -> dict:
+    """{集團: 下次可重試時間}"""
+    return {k[8:]: datetime.strptime(db.was_sent(k), "%Y-%m-%d %H:%M") + timedelta(minutes=BLOCK_MINUTES)
+            for k in db.recent_keys("blocked:")}
 
 
 def fmt(price, unit):
