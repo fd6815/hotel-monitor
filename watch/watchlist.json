@@ -30,6 +30,16 @@
    "alert_drop": true,
    "drop_min": 2000,
    "ihg_path": "intercontinental/hotels/us/en/new-taipei-city/tpehs"
+  },
+  {
+   "id": "ihg-tyosj",
+   "chain": "ihg",
+   "code": "TYOSJ",
+   "name": "東京金普頓",
+   "mode": "points",
+   "alert_drop": true,
+   "drop_min": 2000,
+   "ihg_path": "kimptonhotels/hotels/us/en/shinjuku-hotel-tokyo-japan/tyosj"
   }
  ],
  "monitors": [
