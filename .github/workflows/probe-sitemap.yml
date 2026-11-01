@@ -6,6 +6,7 @@ jobs:
     steps:
       - run: |
           UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
-          for u in https://www.marriott.com/robots.txt https://www.marriott.com/sitemap.xml https://www.ihg.com/robots.txt https://www.ihg.com/sitemap.xml https://www.ihg.com/sitemapindex.xml; do
-            echo "=== $u"; curl -sSL -A "$UA" -m 30 -o /tmp/o -w "%{http_code} %{size_download}\n" "$u"; head -c 1500 /tmp/o; echo
+          curl -sSL -A "$UA" -m 30 https://www.marriott.com/sitemap-index.xml -o idx.xml; echo "IDX $(wc -c < idx.xml)"; grep -o '<loc>[^<]*</loc>' idx.xml | head -80
+          for s in $(grep -o '<loc>[^<]*</loc>' idx.xml | sed 's/<[^>]*>//g' | grep -i -E 'hotel|property|en-us' | head -4); do
+            echo "=== $s"; curl -sSL -A "$UA" -m 60 "$s" -o s.xml; echo "size $(wc -c < s.xml)"; grep -o '<loc>[^<]*</loc>' s.xml | head -15; grep -c '<loc>' s.xml
           done
