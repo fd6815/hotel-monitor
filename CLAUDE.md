@@ -27,7 +27,7 @@ GitHub：`fd6815/hotel-monitor`（公開）。手機網頁：https://fd6815.gith
 ## 開發規則
 - **改完先跑測試，不要碰真實官網**：`.venv\Scripts\python.exe tests\test_poll.py`。萬豪查太快會被封鎖 1–2 小時，真的要測才查，一次就好。
 - 網頁只改 `site/index.html` 需要的部分，用 Grep 找位置，不要整份讀。
-- 部署：電腦程式改完下一次排程就生效；手機網頁 push 後由 pages.yml 部署。git 在 `C:\Program Files\Git\cmd\git.exe`（新開的 shell 才有 PATH），credential helper 會讀 `data\github_token.txt`。
+- 部署：電腦程式改完下一次排程就生效；手機網頁 push 後由 pages.yml 部署。git 在 `C:\Program Files\Git\cmd\git.exe`（新開的 shell 才有 PATH），credential helper（`scripts/git-credential.sh`）會讀 `data\github_token.txt`。
 - 電腦和手機會持續 commit 到 main，push 前先 `git pull --rebase`。改 `.github/workflows` 需要 token 有 Workflows 權限，目前沒有。
 
 ## 待辦
