@@ -513,9 +513,9 @@ function renderStatus(){
   const mine = PENDING.filter(p=>p.hotel===curHotel || p.type==="open");
   if (PENDING.length){
     const p = PENDING[PENDING.length-1], mins = Math.max(0, Math.round((Date.now()-p.t)/60000));
-    const what = p.type==="open" ? "開頁更新" : `${hotelName(p.hotel)} ${p.month.replace("-"," 年 ")} 月`;
+    const what = p.type==="open" ? "開頁更新" : p.type==="daily" ? "完整更新" : `${hotelName(p.hotel)} ${p.month.replace("-"," 年 ")} 月`;
     el.className = "status busy";
-    el.innerHTML = `<span class="dot"></span>更新中：${esc(what)}（已送出 ${mins} 分鐘，萬豪一個月約需 8 分鐘）`;
+    el.innerHTML = `<span class="dot"></span>更新中：${esc(what)}（已送出 ${mins} 分鐘${p.type==="daily"?"":"，萬豪一個月約需 8 分鐘"}）`;
   } else if (curHotel && monthNeedsFetch(curHotel, curMonth)) {
     el.className = "status";
     el.innerHTML = token() ? "這個月還沒查過" : `這個月還沒查過，<a href="#" id="needTok">設定 token</a> 後切換月份會自動查詢`;
@@ -558,6 +558,13 @@ async function requestOnOpen(){
   if (!token() || !curHotel || recentlyRequested("hm-req:open", 15*60*1000)) return;
   LS.set("hm-req:open", Date.now());
   await sendRequest({type:"open", hotel:curHotel, month:curMonth});
+}
+async function requestDaily(){
+  if (!token()) { toast("請先設定 GitHub token"); return; }
+  if (PENDING.some(p=>p.type==="daily")) { toast("完整更新進行中"); return; }
+  if (recentlyRequested("hm-req:daily", 10*60*1000)) { toast("10 分鐘內已更新過，請稍後再試"); return; }
+  if (await sendRequest({type:"daily"})) { LS.set("hm-req:daily", Date.now()); toast("已請電腦完整更新"); closeSheet(); }
+  else toast("送出失敗，請稍後再試");
 }
 let watchTimer = null;
 function watchPending(){
@@ -681,9 +688,11 @@ function openSettings(msg){
     <div class="field"><input id="tok" type="password" placeholder="github_pat_…" autocomplete="off" value=""></div>
     <div class="btns">${has?'<button class="btn danger" id="tokDel">移除 token</button>':""}<button class="btn pri" id="tokSave">儲存並測試</button></div>
     <div class="sec-title" style="margin-top:18px">資料更新</div>
-    <div class="hint">你的電腦每天 07:13、19:13 抓未來 60 天，每 30 分鐘檢查監控日期。打開這個網頁時會請電腦更新一次（15 分鐘內不重複）；切換到 60 天以後的月份時，會請電腦查那個月。新收藏的飯店會在下一次檢查時開始抓。</div>
+    <div class="hint">你的電腦每天 07:13、19:13 抓未來 60 天，每 30 分鐘檢查監控日期。打開這個網頁時會請電腦更新一次（15 分鐘內不重複）；切換到 60 天以後的月份時，會請電腦查那個月。新收藏的飯店會在下一次檢查時開始抓。「立即完整更新」會請電腦馬上查所有收藏飯店未來 60 天，電腦需開機；查太頻繁可能被萬豪暫時封鎖。</div>
+    <div class="btns"><button class="btn" id="btnDaily">立即完整更新</button></div>
     <div class="btns"><button class="btn" id="sheetClose">關閉</button></div>`);
   $("#sheetClose").onclick = closeSheet;
+  $("#btnDaily").onclick = requestDaily;
   $("#tokSave").onclick = async () => {
     const v = $("#tok").value.trim(); if (!v) { toast("請貼上 token"); return; }
     const r = await fetch(`https://api.github.com/repos/${REPO}`, {headers:{"Authorization":"Bearer "+v,"Accept":"application/vnd.github+json"}});
