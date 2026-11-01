@@ -9,7 +9,7 @@ browser:
   # exe: C:\Program Files\Google\Chrome\Application\chrome.exe   # 自動偵測，找不到再手動填
   profile_dir: data/chrome-profile   # 程式專用 Chrome 設定檔（不影響你平常的 Chrome）
   offscreen: true       # 視窗開在螢幕外，不干擾你使用電腦
-  delay_seconds: [3, 6] # 萬豪每次查詢間隔
+  delay_seconds: [12, 20]  # 萬豪每次查詢間隔，太快會被暫時封鎖
   page_timeout: 45
 
 # 手機看日曆：上傳到 GitHub，網址 https://fd6815.github.io/hotel-monitor/

@@ -64,11 +64,19 @@ async def collect(cfg, db, hotels, mode, fetch_day):
             for h in hs:
                 res = []
                 dates = target_dates(cfg, h, mode)
+                denied = 0
                 for i, d in enumerate(dates, 1):
                     q = await f.fetch(h, d)
-                    db.save_quote(q, fetch_day)
                     res.append(q)
                     print(f"  {h['name']} {d} {q.status} {q.price or ''} {q.note}")
+                    if "Access Denied" in q.note:
+                        denied += 1
+                        if denied >= 3:
+                            print(f"  {h['name']} 連續被官網擋，這次先停止，保留前次資料")
+                            break
+                        continue   # 被擋的結果不寫入，避免蓋掉前次價格
+                    denied = 0
+                    db.save_quote(q, fetch_day)
                     if delay and i < len(dates):
                         if h["chain"] == "ihg" and not h.get("url_template"):
                             await asyncio.sleep(random.uniform(0.5, 1.5))
