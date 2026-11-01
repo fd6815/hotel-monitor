@@ -1,0 +1,11 @@
+db_path: data/demo.db
+output_dir: dist-demo
+days_ahead: 60
+hotels:
+  - {id: nagoya-marriott, name: 名古屋萬豪, chain: demo, city: 名古屋, demo_base: 55000, alert_drop: true, drop_min: 2000}
+  - {id: ic-taipei, name: 台北洲際, chain: demo, city: 台北, demo_base: 58000, alert_drop: true}
+  - {id: hyatt-tokyo, name: 東京凱悅, chain: demo, city: 東京, demo_base: 25000}
+  - {id: accor-cash, name: 台北雅高現金房, chain: demo, mode: cash, currency: TWD, demo_base: 5600, city: 台北}
+monitors:
+  - {hotel: nagoya-marriott, date: 2026-11-28, max_price: 60000}
+  - {hotel: ic-taipei, date: 2026-12-06, max_price: 50000}

@@ -1,0 +1,8 @@
+__pycache__/
+.venv/
+data/browser-profile/
+data/debug/
+data/*.log
+data/demo.db
+dist/
+dist-demo/

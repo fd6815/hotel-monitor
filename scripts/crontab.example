@@ -1,0 +1,5 @@
+# crontab -e 後貼上（路徑改成你的專案位置與 python 路徑）
+# 每天 07:13、19:13 抓完整日曆
+13 7,19 * * * cd $HOME/hotel-monitor && .venv/bin/python run.py daily >> data/cron.log 2>&1
+# 每 30 分鐘檢查指定日期監控
+*/30 * * * * cd $HOME/hotel-monitor && .venv/bin/python run.py watch >> data/cron.log 2>&1

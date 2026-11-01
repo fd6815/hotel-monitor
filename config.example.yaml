@@ -1,0 +1,77 @@
+# 複製成 config.yaml 後修改
+db_path: data/hotelmon.db
+data_dir: data
+output_dir: dist
+days_ahead: 60          # 每日日曆抓未來幾天（每間飯店可用 days_ahead 覆寫）
+adults: 2
+
+browser:
+  headless: false       # 官網防爬較嚴，建議維持 false（會開視窗）
+  channel: chrome       # 用本機 Chrome；刪掉這行則用 Playwright 內建 Chromium
+  profile_dir: data/browser-profile   # 會員登入狀態存在這裡
+  locale: en-US         # 英文頁面解析最穩
+  delay_seconds: [4, 9] # 每次查詢間隔，太快容易被擋
+  page_timeout: 45
+
+# 通知：至少設一種
+telegram:
+  bot_token: ""         # 向 @BotFather 建 bot 取得
+  chat_id: ""           # 傳訊息給 bot 後，從 getUpdates 取得
+ntfy:
+  topic: ""             # 例如 my-hotel-alert-xxxx，手機裝 ntfy App 訂閱同名 topic
+
+# code 取法：在官網打開該飯店訂房頁，網址中的飯店代碼
+#   萬豪 propertyCode=XXXXX、IHG qSlH=XXXXX、凱悅 /shop/rooms/xxxxx、雅高 /rates/XXXX/
+hotels:
+  - id: nagoya-marriott
+    name: 名古屋萬豪
+    chain: marriott
+    code: "填入propertyCode"
+    city: 名古屋
+    mode: points          # points 積分房 / cash 現金房
+    alert_drop: true      # 收藏降價通知
+    drop_min: 2000
+
+  - id: ic-taipei
+    name: 台北洲際
+    chain: ihg
+    code: "填入qSlH"
+    city: 台北
+    mode: points
+    alert_drop: true
+    drop_min: 2000
+
+  - id: example-hyatt
+    name: 凱悅範例
+    chain: hyatt
+    code: "填入spirit代碼"
+    enabled: false        # 填好 code 再改 true
+
+  - id: example-accor-cash
+    name: 雅高現金房範例
+    chain: accor
+    code: "填入代碼"
+    mode: cash
+    currency: TWD         # 只抓這個幣別的價格
+    enabled: false
+
+  # 官網改版、或預設網址不準時，可直接指定：
+  #   url_template: "https://...{ci}...{co}..."   變數：code ci co ci_mdy co_mdy ci_d co_d ci_my_ihg co_my_ihg adults
+  #   price_selector: ".rate-price"               只從這個 CSS 區塊找價格
+  #   ignore_values: [123456]                     例如頁首顯示的你的點數餘額
+
+monitors:               # 指定日期，低於門檻通知一次後轉為「已完成」
+  - hotel: nagoya-marriott
+    date: 2026-11-28
+    max_price: 60000
+  - hotel: ic-taipei
+    date: 2026-12-06
+    max_price: 65000
+
+deals:                  # 優惠情報 RSS，含關鍵字的新文章才通知
+  feeds:
+    - https://loyaltylobby.com/feed/
+    - https://onemileatatime.com/feed/
+    - https://thepointsguy.com/feed/
+  keywords: [marriott, bonvoy, ihg, hyatt, accor, "all - accor", promotion, promo, flash sale, points sale, japan, taiwan, tokyo, taipei]
+  exclude: [credit card review]

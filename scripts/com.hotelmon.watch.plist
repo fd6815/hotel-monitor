@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- macOS：把 /Users/YOU 改成你的家目錄，放到 ~/Library/LaunchAgents/ 後
+     launchctl load ~/Library/LaunchAgents/com.hotelmon.watch.plist -->
+<plist version="1.0"><dict>
+  <key>Label</key><string>com.hotelmon.watch</string>
+  <key>WorkingDirectory</key><string>/Users/YOU/hotel-monitor</string>
+  <key>ProgramArguments</key><array>
+    <string>/Users/YOU/hotel-monitor/.venv/bin/python</string><string>run.py</string><string>watch</string>
+  </array>
+  <key>StartInterval</key><integer>1800</integer>
+  <key>StandardOutPath</key><string>/Users/YOU/hotel-monitor/data/watch.log</string>
+  <key>StandardErrorPath</key><string>/Users/YOU/hotel-monitor/data/watch.log</string>
+</dict></plist>
