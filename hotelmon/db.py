@@ -76,6 +76,10 @@ class DB:
         self.con.execute("INSERT OR REPLACE INTO alerts_sent VALUES(?,?)", (key, now()))
         self.con.commit()
 
+    def clear_sent(self, key: str):
+        self.con.execute("DELETE FROM alerts_sent WHERE key=?", (key,))
+        self.con.commit()
+
     def recent_keys(self, prefix: str, limit=60):
         return [r["key"] for r in self.con.execute(
             "SELECT key FROM alerts_sent WHERE key LIKE ? ORDER BY sent_at DESC LIMIT ?", (prefix + "%", limit))]
