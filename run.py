@@ -133,7 +133,7 @@ def main():
     if a.cmd == "poll":   # 先看有沒有請求，沒有就安靜結束（每分鐘執行，不讀清單、不寫 log）
         db0 = DB(cfg.get("db_path", "data/hotelmon.db"))
         pending = pending_requests(cfg, db0)
-        if not pending:
+        if not pending or only_waiting(db0, pending):
             return
     if cfg.get("github", {}).get("repo") and not cfg.get("use_local_watchlist"):
         w = watchlist.load(cfg)
@@ -198,6 +198,34 @@ def pending_requests(cfg, db):
             and now - float(r.get("t", 0)) / 1000 < 6 * 3600]
 
 
+def only_waiting(db, pending):
+    """所有請求都已試過、正在等封鎖解除（這段時間每分鐘的 poll 不讀清單、不寫 log）。"""
+    blocked = alerts.blocked_chains(db)
+    return (blocked and all(t > datetime.now() for t in blocked.values())
+            and all(db.was_sent("reqw:" + str(r["id"])) for r in pending))
+
+
+def request_targets(r, cfg, hotels, by_id, today):
+    """一個手機請求要查的日期：{飯店 id: {日期}}"""
+    t = {}
+    if r.get("type") == "daily":   # 手機按「立即完整更新」：所有收藏飯店，範圍同每日排程
+        for h in hotels:
+            t.setdefault(h["id"], set()).update(target_dates(cfg, h, "daily"))
+    h = by_id.get(r.get("hotel"))
+    if h and r.get("month"):
+        ds = month_dates(r["month"], today)
+        if r.get("type") == "month":   # 60 天內由每日排程負責，這裡只補 60 天以後
+            lim = today + timedelta(days=int(h.get("days_ahead", cfg.get("days_ahead", 60))) - 1)
+            ds = {d for d in ds if d > lim}
+        t.setdefault(h["id"], set()).update(ds)
+    if r.get("type") == "open":
+        for m in cfg.get("monitors", []):
+            d = str(m["date"])
+            if m["hotel"] in by_id and d >= today.isoformat():
+                t.setdefault(m["hotel"], set()).add(date.fromisoformat(d))
+    return {k: v for k, v in t.items() if v}
+
+
 def poll(a, cfg, db, hotels, by_id, pending):
     now = time.time()
     lock = Path(cfg.get("data_dir", "data")) / "run.lock"
@@ -206,36 +234,43 @@ def poll(a, cfg, db, hotels, by_id, pending):
     lock.write_text("poll")
     try:
         today = date.today()
+        wait = {c for c, t in alerts.blocked_chains(db).items() if t > datetime.now()}
+        plans = {}   # 每個請求還沒完成的飯店（同一請求已成功的飯店，重試時不再查）
         targets = {}
-        full = any(r.get("type") == "daily" for r in pending)
-        if full:   # 手機按「立即完整更新」：所有收藏飯店，範圍同每日排程
-            for h in hotels:
-                targets.setdefault(h["id"], set()).update(target_dates(cfg, h, "daily"))
         for r in pending:
-            h = by_id.get(r.get("hotel"))
-            if h and r.get("month"):
-                ds = month_dates(r["month"], today)
-                if r.get("type") == "month":   # 60 天內由每日排程負責，這裡只補 60 天以後
-                    lim = today + timedelta(days=int(h.get("days_ahead", cfg.get("days_ahead", 60))) - 1)
-                    ds = {d for d in ds if d > lim}
-                targets.setdefault(h["id"], set()).update(ds)
-            if r.get("type") == "open":
-                for m in cfg.get("monitors", []):
-                    d = str(m["date"])
-                    if m["hotel"] in by_id and d >= today.isoformat():
-                        targets.setdefault(m["hotel"], set()).add(date.fromisoformat(d))
-        print(f"[poll] {datetime.now():%m-%d %H:%M} 處理 {len(pending)} 個請求：" +
-              ", ".join(f"{by_id[k]['name']} {len(v)} 天" for k, v in targets.items()))
+            plans[r["id"]] = {k: v for k, v in request_targets(r, cfg, hotels, by_id, today).items()
+                              if not db.was_sent(f"reqh:{r['id']}:{k}")}
+            for k, v in plans[r["id"]].items():
+                if by_id[k]["chain"] not in wait:
+                    targets.setdefault(k, set()).update(v)
+        full = any(r.get("type") == "daily" for r in pending)
+        results = {}
         msgs = []
         if targets:
+            print(f"[poll] {datetime.now():%m-%d %H:%M} 處理 {len(pending)} 個請求：" +
+                  ", ".join(f"{by_id[k]['name']} {len(v)} 天" for k, v in targets.items()))
             results = asyncio.run(collect(cfg, db, hotels, "poll", a.fetch_day, targets))
+            alerts.update_blocks(db, hotels, results)
             msgs += alerts.check_monitors(db, cfg, by_id)
             for h in hotels:
                 msgs += alerts.check_errors(db, h, results.get(h["id"], []), a.fetch_day)
-                if full:
+                if full and h["id"] in results:
                     msgs += alerts.check_drops(db, cfg, h, a.fetch_day)
+        finished = 0
         for r in pending:
-            db.mark_sent("req:" + str(r["id"]))
+            left = False
+            for k in plans[r["id"]]:
+                if k in targets and not alerts.hotel_failed(results.get(k)):
+                    db.mark_sent(f"reqh:{r['id']}:{k}")
+                else:
+                    left = True
+            if left:   # 被擋：不標完成，等 BLOCK_MINUTES 後重試，超過 6 小時就放棄
+                db.mark_sent("reqw:" + str(r["id"]))
+            else:
+                db.mark_sent("req:" + str(r["id"]))
+                finished += 1
+        if not targets and not finished:
+            return   # 全部都在等封鎖解除
         for m in msgs:
             notify.send(cfg, m)
         out = report.write(db, cfg, hotels)
@@ -252,6 +287,7 @@ def run_cmd(a, cfg, db, hotels, by_id):
             db.mark_sent("line-hello")
     if a.cmd in ("daily", "watch"):
         results = asyncio.run(collect(cfg, db, hotels, a.cmd, a.fetch_day))
+        alerts.update_blocks(db, hotels, results)
         msgs += alerts.check_monitors(db, cfg, by_id)
         for h in hotels:
             msgs += alerts.check_errors(db, h, results.get(h["id"], []), a.fetch_day)
