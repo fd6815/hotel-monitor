@@ -1,8 +1,7 @@
 __pycache__/
 .venv/
-data/browser-profile/
-data/debug/
-data/*.log
-data/demo.db
+.claude/
+data/
+data_demo_test.log
 dist/
-dist-demo/
+dist-*/

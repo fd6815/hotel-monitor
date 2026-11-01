@@ -14,8 +14,8 @@ CHAIN_LABEL = {"marriott": "萬豪", "ihg": "IHG", "hyatt": "凱悅", "accor": "
 
 def build(db, cfg, hotels):
     today = date.today().isoformat()
-    data = {"updated": now(), "hotels": [], "monitors": [], "deals": []}
     rt = fx.rates(cfg)
+    data = {"updated": now(), "hotels": [], "monitors": [], "deals": [], "fx": rt, "adults": cfg.get("adults", 2)}
     for h in hotels:
         days = {}
         all_snaps = db.snapshots(h["id"], today)
@@ -54,6 +54,7 @@ def build(db, cfg, hotels):
             "id": h["id"], "name": h["name"], "chain": CHAIN_LABEL.get(h["chain"], h["chain"]),
             "chain_id": h["chain"], "code": h.get("code", ""),
             "city": h.get("city", ""), "mode": h.get("mode", "points"),
+            "standard_max": h.get("standard_max"), "value_good_cfg": h.get("value_good"),
             "last": db.last_fetch(h["id"]), "days": days,
             "value_range": [vals[0], vals[-1]] if vals else None, "value_good": good,
         })

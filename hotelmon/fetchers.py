@@ -212,6 +212,7 @@ class BrowserFetcher:
         self.ihg_page = None
         self.mar_page = None
         self.mar_cash_broken = False
+        self.mar_blocked = False   # 這次執行已被萬豪擋下，不再對萬豪發任何請求
 
     async def __aenter__(self):
         from playwright.async_api import async_playwright
@@ -276,6 +277,7 @@ class BrowserFetcher:
             await self.mar_page.goto("https://www.marriott.com/default.mi", wait_until="domcontentloaded", timeout=60000)
             await self.mar_page.wait_for_timeout(5000)
             if "access denied" in (await self.mar_page.title()).lower():
+                self.mar_blocked = True
                 return None
         want = sorted(set(dates))
         adults = int(self.cfg.get("adults", 2))
@@ -289,6 +291,10 @@ class BrowserFetcher:
                     continue
                 res = await self.mar_page.evaluate(MAR_CAL_JS, [hotel["code"], start.isoformat(), end.isoformat(),
                                                                 adults, rtype, MAR_CAL_QUERY, MAR_CAL_SIG])
+                if "access denied" in res["text"].lower():
+                    print(f"  [marriott] 月曆 API HTTP {res['status']}：Access Denied")
+                    self.mar_blocked = True
+                    return None
                 if res["status"] != 200:
                     if rtype == "STANDARD":
                         self.mar_cash_broken = True

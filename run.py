@@ -39,7 +39,7 @@ for _s in (sys.stdout, sys.stderr):
 
 from hotelmon import alerts, deals, notify, publish, report, watchlist
 from hotelmon.db import DB
-from hotelmon.fetchers import BrowserFetcher, DemoFetcher
+from hotelmon.fetchers import BrowserFetcher, DemoFetcher, Quote
 
 
 def load(path):
@@ -81,7 +81,8 @@ async def collect(cfg, db, hotels, mode, fetch_day, targets=None):
                 res = []
                 dates = sorted(targets[h["id"]]) if targets is not None else target_dates(cfg, h, mode, db)
                 # 萬豪：先用價格月曆 API 一次查整段，失敗才逐日開網頁
-                if h["chain"] == "marriott" and hasattr(f, "marriott_range") and h.get("mode", "points") == "points":
+                if h["chain"] == "marriott" and hasattr(f, "marriott_range") and h.get("mode", "points") == "points" \
+                        and not f.mar_blocked:
                     try:
                         qs = await f.marriott_range(h, dates)
                     except Exception as e:  # noqa: BLE001
@@ -93,6 +94,10 @@ async def collect(cfg, db, hotels, mode, fetch_day, targets=None):
                             print(f"  {h['name']} {q.stay_date} {q.status} {q.price or ''} {q.note} {q.cash or ''}{q.cash_unit or ''}")
                         results[h["id"]] = qs
                         continue
+                if h["chain"] == "marriott" and getattr(f, "mar_blocked", False):   # 被擋就停，再開網頁只會延長封鎖
+                    print(f"  {h['name']} 被官網擋，這次先停止，保留前次資料")
+                    results[h["id"]] = [Quote(h["id"], d, None, None, "error", "被官網防火牆擋下（Access Denied）") for d in dates]
+                    continue
                 denied = 0
                 for i, d in enumerate(dates, 1):
                     q = await f.fetch(h, d)
@@ -102,6 +107,8 @@ async def collect(cfg, db, hotels, mode, fetch_day, targets=None):
                         denied += 1
                         if denied >= 3:
                             print(f"  {h['name']} 連續被官網擋，這次先停止，保留前次資料")
+                            if h["chain"] == "marriott":
+                                f.mar_blocked = True
                             break
                         continue   # 被擋的結果不寫入，避免蓋掉前次價格
                     denied = 0
@@ -208,9 +215,10 @@ def only_waiting(db, pending):
 def request_targets(r, cfg, hotels, by_id, today):
     """一個手機請求要查的日期：{飯店 id: {日期}}"""
     t = {}
-    if r.get("type") == "daily":   # 手機按「立即完整更新」：所有收藏飯店，範圍同每日排程
+    if r.get("type") == "daily":   # 手機按「立即完整更新」：範圍同每日排程；chains 指定集團（IHG 網頁已自己查）
         for h in hotels:
-            t.setdefault(h["id"], set()).update(target_dates(cfg, h, "daily"))
+            if not r.get("chains") or h["chain"] in r["chains"]:
+                t.setdefault(h["id"], set()).update(target_dates(cfg, h, "daily"))
     h = by_id.get(r.get("hotel"))
     if h and r.get("month"):
         ds = month_dates(r["month"], today)
@@ -221,7 +229,8 @@ def request_targets(r, cfg, hotels, by_id, today):
     if r.get("type") == "open":
         for m in cfg.get("monitors", []):
             d = str(m["date"])
-            if m["hotel"] in by_id and d >= today.isoformat():
+            if m["hotel"] in by_id and d >= today.isoformat() \
+                    and (not r.get("chains") or by_id[m["hotel"]]["chain"] in r["chains"]):
                 t.setdefault(m["hotel"], set()).add(date.fromisoformat(d))
     return {k: v for k, v in t.items() if v}
 

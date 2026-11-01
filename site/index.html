@@ -511,7 +511,10 @@ function savePending(){ LS.set("hm-pending", JSON.stringify(PENDING)); }
 function renderStatus(){
   const el = $("#status"); if (!el) return;
   const mine = PENDING.filter(p=>p.hotel===curHotel || p.type==="open");
-  if (PENDING.length){
+  if (LIVE_JOBS.length){
+    el.className = "status busy";
+    el.innerHTML = `<span class="dot"></span>查詢中：${LIVE_JOBS.map(j=>`${esc(hotelName(j.hid))} ${j.done}/${j.total}`).join("、")}`;
+  } else if (PENDING.length){
     const p = PENDING[PENDING.length-1], mins = Math.max(0, Math.round((Date.now()-p.t)/60000));
     const what = p.type==="open" ? "開頁更新" : p.type==="daily" ? "完整更新" : `${hotelName(p.hotel)} ${p.month.replace("-"," 年 ")} 月`;
     el.className = "status busy";
@@ -519,7 +522,7 @@ function renderStatus(){
     el.innerHTML = blk.length
       ? `<span class="dot"></span>${esc(what)}：${blk.map(b=>`${esc(b.chain)}暫時封鎖，約 ${esc(b.retry)} 自動重試`).join("、")}`
       : `<span class="dot"></span>更新中：${esc(what)}（已送出 ${mins} 分鐘${p.type==="daily"?"":"，萬豪一個月約需 8 分鐘"}）`;
-  } else if (curHotel && monthNeedsFetch(curHotel, curMonth)) {
+  } else if (curHotel && !isLive(curHotel) && monthNeedsFetch(curHotel, curMonth)) {
     el.className = "status";
     el.innerHTML = token() ? "這個月還沒查過" : `這個月還沒查過，<a href="#" id="needTok">設定 token</a> 後切換月份會自動查詢`;
     const t = $("#needTok"); if (t) t.onclick = e => { e.preventDefault(); openSettings(); };
@@ -551,6 +554,7 @@ function recentlyRequested(key, ms){ const t = +LS.get(key, 0); return Date.now(
 let monthTimer = null;
 function maybeFetchMonth(){ clearTimeout(monthTimer); renderStatus(); monthTimer = setTimeout(doFetchMonth, 1500); }
 async function doFetchMonth(){
+  if (curHotel && isLive(curHotel)) return liveMonth(curHotel, curMonth);
   if (!curHotel || !token() || !monthNeedsFetch(curHotel, curMonth)) { renderStatus(); return; }
   const key = `hm-req:${curHotel}:${curMonth}`;
   if (recentlyRequested(key, 2*3600*1000) || PENDING.some(p=>p.hotel===curHotel && p.month===curMonth)) { renderStatus(); return; }
@@ -558,16 +562,139 @@ async function doFetchMonth(){
   if (await sendRequest({type:"month", hotel:curHotel, month:curMonth})) toast("已請電腦查詢這個月");
 }
 async function requestOnOpen(){
-  if (!token() || !curHotel || recentlyRequested("hm-req:open", 15*60*1000)) return;
+  if (recentlyRequested("hm-req:open", LIVE_TTL)) return;
   LS.set("hm-req:open", Date.now());
-  await sendRequest({type:"open", hotel:curHotel, month:curMonth});
+  const mons = WL.monitors.filter(m=>m.date>=todayStr);
+  for (const id of new Set(mons.filter(m=>isLive(m.hotel)).map(m=>m.hotel)))
+    liveFetch(id, mons.filter(m=>m.hotel===id).map(m=>m.date));
+  // 只剩 IHG 以外的飯店才需要電腦開瀏覽器
+  const chains = pcChains(), curPc = curHotel && !isLive(curHotel);
+  if (!token() || !chains.length || (!curPc && !mons.some(m=>!isLive(m.hotel)))) return;
+  await sendRequest(curPc ? {type:"open", chains, hotel:curHotel, month:curMonth} : {type:"open", chains});
 }
 async function requestDaily(){
-  if (!token()) { toast("請先設定 GitHub token"); return; }
-  if (PENDING.some(p=>p.type==="daily")) { toast("完整更新進行中"); return; }
+  if (PENDING.some(p=>p.type==="daily") || LIVE_JOBS.length) { toast("更新進行中"); return; }
   if (recentlyRequested("hm-req:daily", 10*60*1000)) { toast("10 分鐘內已更新過，請稍後再試"); return; }
-  if (await sendRequest({type:"daily"})) { LS.set("hm-req:daily", Date.now()); toast("已請電腦完整更新"); closeSheet(); }
-  else toast("送出失敗，請稍後再試");
+  const chains = pcChains(), live = allHotels().filter(h=>isLive(h.id));
+  if (!live.length && !token()) { toast("請先設定 GitHub token"); return; }
+  LS.set("hm-req:daily", Date.now()); closeSheet();
+  let pc = false;
+  if (chains.length && token()) pc = await sendRequest({type:"daily", chains});
+  const oks = await Promise.all(live.map(h=>liveFetch(h.id, nextDays(h.id))));
+  if (oks.includes(false) && token()) { await sendRequest({type:"daily", chains:["ihg"]}); toast("IHG 直接查詢失敗，已改請電腦查詢"); return; }
+  if (oks.includes(false)) { toast("IHG 查詢失敗，稍後再試"); return; }
+  const noPc = chains.length && !token();
+  toast(live.length ? (pc ? "IHG 已更新，其他飯店已請電腦查詢" : noPc ? "IHG 已更新；其他飯店要設定 token 才能請電腦查" : "房價已更新")
+                    : (pc ? "已請電腦完整更新" : "送出失敗，請稍後再試"));
+}
+
+/* ---------- IHG：網頁直接查官網 API，結果只存在這個瀏覽器 ---------- */
+const IHG_KEY = "hsL8GAAz7drdIbEjBCejdA1Ud2MVhxoo";   // ihg.com 網頁前端公開使用的金鑰
+const LIVE_TTL = 15*60*1000, LIVE_WORKERS = 4, LIVE_KEEP = 3*86400*1000;
+let LIVE = (()=>{ try { return JSON.parse(LS.get("hm-live","{}")); } catch(e){ return {}; } })();   // {飯店:{日期:{p,s,u,n,cn,cu,t}}}
+const LIVE_JOBS = [], INFLIGHT = new Set();
+const allHotels = () => WL.hotels.length ? WL.hotels : DATA.hotels;
+function isLive(id){ const h = wlHotel(id)||dataHotel(id); return !!h && (h.chain_id||h.chain)==="ihg" && !!h.code && (h.mode||"points")==="points"; }
+function pcChains(){ return [...new Set(allHotels().filter(h=>!isLive(h.id)).map(h=>h.chain_id||h.chain))]; }
+function addDay(k, n){ const d=new Date(k+"T00:00"); d.setDate(d.getDate()+n); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; }
+function stamp(t){ const d=new Date(t); return `${addDay(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`,0)} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`; }
+function nextDays(id){ const ds=[]; for (let i=0;i<DAYS_AHEAD;i++) ds.push(addDay(todayStr,i)); return [...new Set([...ds, ...WL.monitors.filter(m=>m.hotel===id).map(m=>m.date)])]; }
+function ihgUrl(h, d){
+  const co=addDay(d,1), my=k=>String(+k.slice(5,7)-1).padStart(2,"0")+k.slice(0,4), path=h.ihg_path||`hotels/us/en/${h.code.toLowerCase()}`;
+  return `https://www.ihg.com/${path}/hoteldetail/rooms?qCiD=${+d.slice(8)}&qCiMy=${my(d)}&qCoD=${+co.slice(8)}&qCoMy=${my(co)}&qAdlt=${DATA.adults||2}&qChld=0&qRms=1&qRtP=IVANI`;
+}
+function toTwd(amount, cur){ if (amount==null || !cur) return null; if (cur==="TWD") return amount; const r=(DATA.fx||{})[cur]; return r ? Math.round(amount/r) : null; }
+async function ihgQuote(code, d){
+  const co = addDay(d,1);
+  const body = {products:[{productCode:"SR",guestCounts:[{otaCode:"AQC10",count:DATA.adults||2},{otaCode:"AQC8",count:0}],startDate:d,endDate:co,quantity:1}],
+    startDate:d,endDate:co,hotelMnemonics:[code],rates:{ratePlanCodes:[{internal:"IVANI"}]},
+    options:{disabilityMode:"ACCESSIBLE_AND_NON_ACCESSIBLE",returnAdditionalRatePlanDescriptions:false}};
+  const r = await fetch("https://apis.ihg.com/availability/v3/hotels/offers?fieldset=rateDetails", {method:"POST",
+    headers:{"content-type":"application/json","x-ihg-api-key":IHG_KEY,"accept-language":"en-US"}, body:JSON.stringify(body)});
+  const text = await r.text();
+  if (r.status===400 && /los/i.test(text)) return {p:null,s:"sold_out",u:null,n:"有最少住宿天數限制"};
+  if (r.status!==200) throw new Error("HTTP "+r.status);
+  const h = JSON.parse(text).hotels[0], offers = ((h.rateDetails||{}).offers||[]).filter(o=>(o.availableStatus||"AVAILABLE")==="AVAILABLE");
+  const pts = offers.filter(o=>o.ratePlanCode==="IVANI").map(o=>{ const po=(o.rewardNights||{}).pointsOnly||{}; return +(po.totalPoints||po.averageDailyPoints||0); }).filter(Boolean);
+  const cash = offers.filter(o=>o.ratePlanCode!=="IVANI").map(o=>Math.round(parseFloat((o.totalRate||{}).amountBeforeTax))).filter(v=>!isNaN(v));
+  const c = cash.length ? {cn:Math.min(...cash), cu:h.propertyCurrency||""} : {cn:null, cu:null};
+  return pts.length ? {p:Math.min(...pts),s:"ok",u:"pts",n:"",...c} : {p:null,s:"sold_out",u:null,n:"無積分房",...c};
+}
+/* 查一批日期；連續失敗 3 次就停止，回傳是否成功 */
+async function liveFetch(hid, dates){
+  const wh = wlHotel(hid)||dataHotel(hid);
+  const todo = dates.filter(d=>d>=todayStr && !INFLIGHT.has(hid+d));
+  if (!todo.length) return true;
+  todo.forEach(d=>INFLIGHT.add(hid+d));
+  const job = {hid, done:0, total:todo.length}; LIVE_JOBS.push(job); renderStatus();
+  const out = (LIVE[hid] ||= {});
+  let i=0, fails=0;
+  const worker = async () => {
+    while (i<todo.length && fails<3){
+      const d = todo[i++];
+      try { out[d] = {...await ihgQuote(wh.code, d), t:Date.now()}; fails = 0; } catch(e){ fails++; }
+      INFLIGHT.delete(hid+d); job.done++;
+      if (job.done%10===0){ applyLive(); renderCal(); } else renderStatus();
+    }
+  };
+  await Promise.all(Array.from({length:LIVE_WORKERS}, worker));
+  todo.forEach(d=>INFLIGHT.delete(hid+d));
+  LIVE_JOBS.splice(LIVE_JOBS.indexOf(job),1);
+  saveLive(); applyLive(); renderAll();
+  return fails<3;
+}
+async function liveMonth(hid, ym){
+  const key = `hm-live-t:${hid}:${ym}`;
+  if (recentlyRequested(key, LIVE_TTL)) { renderStatus(); return; }
+  LS.set(key, Date.now());
+  const [y,m] = ym.split("-").map(Number), ds = [];
+  for (let d=1; d<=new Date(y,m,0).getDate(); d++) ds.push(`${ym}-${String(d).padStart(2,"0")}`);
+  if (await liveFetch(hid, ds)) return;
+  LS.set(key, 0);
+  if (await sendRequest({type:"open", chains:["ihg"], hotel:hid, month:ym})) toast("IHG 直接查詢失敗，已改請電腦查詢");
+  else toast("IHG 查詢失敗，稍後再試");
+}
+function saveLive(){
+  const now = Date.now();
+  for (const ov of Object.values(LIVE)) for (const [d,e] of Object.entries(ov)) if (d<todayStr || now-e.t>LIVE_KEEP) delete ov[d];
+  LS.set("hm-live", JSON.stringify(LIVE));
+}
+/* 把網頁查到的結果蓋到 DATA 上（比電腦資料舊的不蓋），規則同 report.py */
+function applyLive(){
+  for (const [hid,ov] of Object.entries(LIVE)){
+    const w = wlHotel(hid)||dataHotel(hid); if (!w) continue;
+    let h = dataHotel(hid);
+    if (!h){ h = {id:hid,name:w.name,chain:CHAIN[w.chain]||w.chain,chain_id:w.chain,code:w.code,city:w.city||"",mode:"points",last:null,days:{},value_range:null,value_good:null}; DATA.hotels.push(h); }
+    let newest = 0;
+    for (const [d,e] of Object.entries(ov)){
+      if (d<todayStr) continue;
+      const prev = h.days[d], st = stamp(e.t), day = st.slice(0,10), fd = prev&&prev.h&&prev.h.length ? prev.h[prev.h.length-1][0] : "";
+      if (fd>day || (fd===day && (h.last||"")>st)) continue;
+      let delta = null, isNew = false;
+      if (prev && e.s==="ok"){
+        if (prev.p===e.p){ delta = prev.delta??null; isNew = !!prev.new; }
+        else if (prev.s==="ok" && prev.p!=null) delta = e.p-prev.p;
+        else if (prev.s==="sold_out") isNew = true;
+      }
+      h.days[d] = {...prev, p:e.p, s:e.s, u:e.u, n:e.n||"", cn:e.cn??null, cu:e.cu??null, c:toTwd(e.cn,e.cu), delta, new:isNew,
+        url:(prev&&prev.url)||ihgUrl(w,d), h:((prev&&prev.h)||[]).filter(r=>r[0]!==day).concat([[day,e.p,e.s]])};
+      newest = Math.max(newest, e.t);
+    }
+    if (newest){ h.last = stamp(newest); recalcHotel(h); }
+  }
+}
+function recalcHotel(h){
+  const days = Object.entries(h.days).filter(([d])=>d>=todayStr).map(([,x])=>x);
+  const oks = days.filter(x=>(x.s==="ok"||x.s==="premium") && x.p).map(x=>x.p).sort((a,b)=>a-b), n = oks.length;
+  const cap = h.standard_max || (n>=5 ? (n%2 ? oks[(n-1)/2] : (oks[n/2-1]+oks[n/2])/2)*1.7 : null);
+  for (const x of days){
+    if (x.s==="ok" || x.s==="premium"){ x.s = cap && x.p>cap ? "premium" : "ok"; if (x.s==="premium"){ x.delta=null; x.new=false; } }
+    x.v = x.c && x.s==="ok" && x.p ? Math.round(x.c/x.p*10000) : null;
+  }
+  const vals = days.filter(x=>x.v).map(x=>x.v).sort((a,b)=>a-b);
+  const good = h.value_good_cfg || (vals.length>=8 ? vals[Math.floor(vals.length*0.75)] : null);
+  for (const x of days) x.g = !!(good && x.v && x.v>=good);
+  h.value_range = vals.length ? [vals[0], vals[vals.length-1]] : null; h.value_good = good;
 }
 let watchTimer = null;
 function watchPending(){
@@ -584,7 +711,7 @@ function watchPending(){
         const done = new Set(d.requests_done||[]);
         const before = PENDING.length;
         PENDING = PENDING.filter(p=>!done.has(p.id)); savePending();
-        if (PENDING.length < before || d.updated !== DATA.updated){ DATA = d; renderAll(); if (PENDING.length < before) toast("房價已更新"); }
+        if (PENDING.length < before || d.updated !== DATA.updated){ DATA = d; applyLive(); renderAll(); if (PENDING.length < before) toast("房價已更新"); }
       }
     } catch(e){}
     renderStatus();
@@ -693,7 +820,7 @@ function openSettings(msg){
     <div class="field"><input id="tok" type="password" placeholder="github_pat_…" autocomplete="off" value=""></div>
     <div class="btns">${has?'<button class="btn danger" id="tokDel">移除 token</button>':""}<button class="btn pri" id="tokSave">儲存並測試</button></div>
     <div class="sec-title" style="margin-top:18px">資料更新</div>
-    <div class="hint">你的電腦每天 07:13、19:13 抓未來 60 天，每 30 分鐘檢查監控日期。打開這個網頁時會請電腦更新一次（15 分鐘內不重複）；切換到 60 天以後的月份時，會請電腦查那個月。新收藏的飯店會在下一次檢查時開始抓。「立即完整更新」會請電腦馬上查所有收藏飯店未來 60 天，電腦需開機；查太頻繁可能被萬豪暫時封鎖。</div>
+    <div class="hint">IHG 由這個網頁直接查官網（不用 token，也不用開電腦），結果只存在這個瀏覽器，同一個月 15 分鐘內不重複查。萬豪由電腦查：每天 07:13、19:13 抓未來 60 天，每 30 分鐘檢查監控日期；切換到 60 天以後的月份時會請電腦查那個月。LINE 通知一律由電腦發送。「立即完整更新」會查所有收藏飯店未來 60 天；查太頻繁可能被萬豪暫時封鎖。</div>
     <div class="btns"><button class="btn" id="btnDaily">立即完整更新</button></div>
     <div class="btns"><button class="btn" id="sheetClose">關閉</button></div>`);
   $("#sheetClose").onclick = closeSheet;
@@ -717,6 +844,7 @@ let qTimer; $("#q").addEventListener("input", ()=>{ clearTimeout(qTimer); qTimer
 (async () => {
   await loadData();
   await loadWatchlist();
+  applyLive();
   document.querySelectorAll("#pmode button").forEach(b=>b.classList.toggle("on", b.dataset.m===PMODE));
   show(view);
   renderAll();
