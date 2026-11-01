@@ -66,7 +66,7 @@ GitHub Actions 雲端直接抓萬豪會被 Akamai 擋（Access Denied），IHG �
 - `probe*.py`：當初逆向 API 用的診斷腳本，可刪
 
 ## 待辦／待確認（2026-11-02 00:12）
-1. 00:13 排程是第一次用萬豪月曆 API 跑：確認速度、點數正確、STANDARD 現金是否可用，並確認 HotelMon Poll 已建立、手機請求有被處理。
+1. 00:13 排程結果：HotelMon Poll 已建立成功。萬豪月曆 API 回 403 Access Denied — 因為 23:58 跑 probe5 連開 3 頁後又被暫時封鎖，不代表 API 寫法錯。等封鎖解除（約 1–2 小時）後再確認月曆 API 速度、點數正確、STANDARD 現金是否可用，以及手機請求（open、month）有被 poll 處理。
 2. 使用者想要「立即完整更新」：新增 request type `daily`（poll 收到就跑完整 60 天），網頁設定加按鈕。
 3. 萬豪現金若 STANDARD 不行：抓官網現金月曆頁的 GraphQL（之前 probe5 flex_cash 被暫時封鎖沒抓到）。
 4. 監控門檻目前只有點數，可考慮加現金門檻。
