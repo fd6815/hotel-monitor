@@ -11,7 +11,7 @@ from hotelmon import alerts
 from hotelmon.db import DB
 
 tmp = Path(tempfile.mkdtemp())
-cfg = {"db_path": str(tmp / "t.db"), "data_dir": str(tmp), "days_ahead": 60, "github": {},
+cfg = {"db_path": str(tmp / "t.db"), "data_dir": str(tmp), "days_ahead": 60, "github": {}, "marriott_api": True,
        "monitors": [{"hotel": "b", "date": (date.today() + timedelta(days=100)).isoformat(), "max_price": 1}]}
 hotels = [{"id": "a", "name": "A", "chain": "ihg", "code": "AAAAA"},
           {"id": "b", "name": "B", "chain": "marriott", "code": "BBBBB"}]
@@ -59,7 +59,7 @@ def test_collect():
     mar = [{"id": "m1", "name": "M1", "chain": "marriott", "code": "M1"},
            {"id": "m2", "name": "M2", "chain": "marriott", "code": "M2"}]
     days = {date.today() + timedelta(days=i) for i in range(3)}
-    c = {"browser": {"delay_seconds": [0, 0]}}
+    c = {"browser": {"delay_seconds": [0, 0]}, "marriott_api": True}
     tdb = DB(str(tmp / "c.db"))
     saved = run.BrowserFetcher
     run.BrowserFetcher = FakeBrowser
@@ -74,6 +74,18 @@ def test_collect():
         FakeBrowser.blocked = False
         res = asyncio.run(real_collect(c, tdb, mar[:1], "poll", args.fetch_day, {"m1": days}))
         assert len(FakeBrowser.last.fetch_calls) == 3 and not alerts.hotel_failed(res["m1"])
+        # 預設不用 API：逐日開網頁，第一次被擋就全部停止
+        c.pop("marriott_api")
+        res = asyncio.run(real_collect(c, tdb, mar[:1], "poll", args.fetch_day, {"m1": days}))
+        assert FakeBrowser.last.range_calls == [] and len(FakeBrowser.last.fetch_calls) == 3
+        real_fetch = FakeBrowser.fetch
+        async def denied_fetch(self, hotel, d):
+            self.fetch_calls.append(hotel["id"])
+            return run.Quote(hotel["id"], d, None, None, "error", "被官網防火牆擋下（Access Denied）")
+        FakeBrowser.fetch = denied_fetch
+        res = asyncio.run(real_collect(c, tdb, mar, "poll", args.fetch_day, {"m1": days, "m2": days}))
+        FakeBrowser.fetch = real_fetch
+        assert FakeBrowser.last.fetch_calls == ["m1"] and alerts.hotel_failed(res["m1"]) and alerts.hotel_failed(res["m2"])
     finally:
         run.BrowserFetcher = saved
 
@@ -186,6 +198,21 @@ assert 28 <= held(0) <= 30 and 118 <= held(120) <= 120 and 358 <= held(1000) <= 
 assert alerts.not_blocked(db4, hotels) == [hotels[0]]
 alerts.update_blocks(db4, hotels, {"b": [Q()]})
 assert not db4.was_sent("blocked-since:marriott") and alerts.not_blocked(db4, hotels) == hotels
+
+# 萬豪每天 07:00 後只查一次：監控日期＋最久沒更新的 15 天；手機請求不觸發
+c5 = {"days_ahead": 60, "monitors": [{"hotel": "b", "date": (date.today() + timedelta(days=100)).isoformat(), "max_price": 1}]}
+db5 = DB(str(tmp / "m.db"))
+db5.save_quote(run.Quote("b", date.today(), 1, "pts", "ok"), date.today().isoformat())
+db5.save_quote(run.Quote("a", date.today(), 1, "pts", "ok"), date.today().isoformat())
+early = datetime.now().replace(hour=6)
+later = datetime.now().replace(hour=7)
+assert "b" not in run.schedule_targets(c5, db5, hotels, "watch", early)
+t5 = run.schedule_targets(c5, db5, hotels, "watch", later)
+assert len(t5["b"]) == 16 and date.today() + timedelta(days=100) in t5["b"] and date.today() not in t5["b"], t5["b"]
+assert t5["a"] == set()
+assert "b" not in run.schedule_targets(c5, db5, hotels, "watch", later)
+assert run.request_targets({"type": "daily"}, c5, hotels, by_id, date.today()).keys() == {"a"}
+assert not run.request_targets({"type": "month", "hotel": "b", "month": "2027-01"}, c5, hotels, by_id, date.today())
 
 # 排程：週日第一次才完整
 sun = date(2026, 11, 8)

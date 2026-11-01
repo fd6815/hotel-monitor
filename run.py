@@ -65,6 +65,32 @@ def target_dates(cfg, hotel, mode, db=None):
     return sorted({today + timedelta(days=i) for i in range(n)} | mon)
 
 
+def marriott_dates(cfg, db, hotel, cap=15):
+    """萬豪開網頁查：監控日期＋未來 60 天裡最久沒更新的 cap 天（一次查太多會被封鎖）。"""
+    today = date.today()
+    dates = {date.fromisoformat(str(m["date"])) for m in cfg.get("monitors", [])
+             if m["hotel"] == hotel["id"] and str(m["date"]) >= today.isoformat()}
+    snaps = db.snapshots(hotel["id"], today.isoformat())
+    last = lambda d: snaps[d.isoformat()][0]["fetch_day"] if d.isoformat() in snaps else ""
+    days = [today + timedelta(days=i) for i in range(int(hotel.get("days_ahead", cfg.get("days_ahead", 60))))]
+    return dates | set(sorted((d for d in days if last(d) < today.isoformat()), key=lambda d: (last(d), d))[:cap])
+
+
+def schedule_targets(cfg, db, hotels, mode, now=None):
+    """排程這次要查的日期。萬豪（未開 marriott_api）每天 07:00 後只查一次。"""
+    now = now or datetime.now()
+    due = now.hour >= 7 and not db.was_sent(f"mar:{now.date()}")
+    targets = {}
+    for h in hotels:
+        if h["chain"] == "marriott" and not cfg.get("marriott_api"):
+            if due:
+                targets[h["id"]] = marriott_dates(cfg, db, h)
+                db.mark_sent(f"mar:{now.date()}")
+        else:
+            targets[h["id"]] = set(target_dates(cfg, h, mode, db))
+    return targets
+
+
 async def collect(cfg, db, hotels, mode, fetch_day, targets=None):
     results = {}
     if targets is None:
@@ -84,8 +110,8 @@ async def collect(cfg, db, hotels, mode, fetch_day, targets=None):
                 res = []
                 dates = sorted(targets[h["id"]])
                 # 萬豪：先用價格月曆 API 一次查整段，失敗才逐日開網頁
-                if h["chain"] == "marriott" and hasattr(f, "marriott_range") and h.get("mode", "points") == "points" \
-                        and not f.mar_blocked:
+                if cfg.get("marriott_api") and h["chain"] == "marriott" and hasattr(f, "marriott_range") \
+                        and h.get("mode", "points") == "points" and not f.mar_blocked:
                     try:
                         qs = await f.marriott_range(h, dates)
                     except Exception as e:  # noqa: BLE001
@@ -108,7 +134,7 @@ async def collect(cfg, db, hotels, mode, fetch_day, targets=None):
                     print(f"  {h['name']} {d} {q.status} {q.price or ''} {q.note}")
                     if "Access Denied" in q.note:
                         denied += 1
-                        if denied >= 3:
+                        if denied >= (1 if h["chain"] == "marriott" else 3):
                             print(f"  {h['name']} 連續被官網擋，這次先停止，保留前次資料")
                             if h["chain"] == "marriott":
                                 f.mar_blocked = True
@@ -270,7 +296,8 @@ def request_targets(r, cfg, hotels, by_id, today):
             if m["hotel"] in by_id and d >= today.isoformat() \
                     and (not r.get("chains") or by_id[m["hotel"]]["chain"] in r["chains"]):
                 t.setdefault(m["hotel"], set()).add(date.fromisoformat(d))
-    return {k: v for k, v in t.items() if v}
+    # 萬豪每天排程查一次，手機請求不觸發
+    return {k: v for k, v in t.items() if v and (cfg.get("marriott_api") or by_id[k]["chain"] != "marriott")}
 
 
 def lock_busy(lock):
@@ -344,7 +371,9 @@ def run_cmd(a, cfg, db, hotels, by_id):
         if notify.send_line(cfg, "房價監控已連上 LINE。之後監控達標、降價、抓取失敗都會傳到這裡。"):
             db.mark_sent("line-hello")
     if a.cmd in ("daily", "watch"):
-        results = asyncio.run(collect(cfg, db, alerts.not_blocked(db, hotels), a.cmd, a.fetch_day))
+        run_hotels = alerts.not_blocked(db, hotels)
+        results = asyncio.run(collect(cfg, db, run_hotels, a.cmd, a.fetch_day,
+                                      schedule_targets(cfg, db, run_hotels, a.cmd)))
         alerts.update_blocks(db, hotels, results)
         msgs += alerts.check_monitors(db, cfg, by_id)
         for h in hotels:

@@ -13,6 +13,9 @@ GitHub：`fd6815/hotel-monitor`（公開）。手機網頁：https://fd6815.gith
 ## 優惠情報（`hotelmon/deals.py`，關鍵字規則，不用 AI）
 每 30 分鐘隨 Watch 讀 RSS（config.yaml 的 `deals.feeds`）。網頁只留特價與優惠技巧；LINE 只傳 IHG／Avios／Alaska 點數特賣、bug 價、快速會籍匹配。翻譯用 Google 翻譯免費端點（非官方，失敗顯示原文）。
 
+## 萬豪目前做法
+每天 07:00 後第一次 daily／watch 用 Chrome 逐日開官網頁（`marriott_dates`：監控日期＋60 天內最久沒更新的 15 天），被擋就全停；月曆 API 預設關閉（config `marriott_api: true` 才用）。手機請求和切換月份都不觸發萬豪。IHG 不受影響。
+
 ## 排程（需開機且登入，`data\run.lock` 防重複，90 分鐘逾時）
 | 名稱 | 時間 | 內容 | log |
 |---|---|---|---|
@@ -34,7 +37,7 @@ GitHub：`fd6815/hotel-monitor`（公開）。手機網頁：https://fd6815.gith
 - 電腦和手機會持續 commit 到 main，push 前先 `git pull --rebase`。改 `.github/workflows` 需要 token 有 Workflows 權限，目前沒有。
 
 ## 待辦
-1. 萬豪月曆 API 從 2026-11-01 23:58 起持續 403：`default.mi` 頁面正常，只有 API 被擋，乾淨瀏覽器也一樣（11-02 02:22 實測），不是 Chrome 設定檔問題。重試間隔已改為最長 6 小時。解封後驗證：API 速度與點數、STANDARD 現金、網頁能否直接查。若長期不解封，改用官網實際頁面流程取得資料。
+1. 萬豪從 2026-11-01 23:58 起被擋：`default.mi` 正常，月曆 API 與訂房頁（`availabilitySearch.mi`）都 Access Denied，乾淨瀏覽器也一樣（11-02 02:30 實測）。解封後確認逐日開頁能解析點數；另一個瀏覽器的 zh-hk 語系頁面解析不到價格（`availability.mi` 會跳成沒日期的頁），要看 log 確認。
 5. 優惠來源「里程家」找不到網站，等使用者提供網址。
 2. 2026-11-02 00:22 的 poll 查台北洲際時瀏覽器中途關閉（Target page, context or browser has been closed），原因未查明，再發生要查。
 3. 監控門檻目前只有點數，可考慮加現金門檻。
