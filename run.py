@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """飯店房價監控
 
-  python run.py daily     抓所有飯店未來 N 天房價 → 通知 → 產生日曆頁（建議每天 1–2 次）
+  python run.py daily     週日抓所有飯店未來 N 天房價，其他天只查監控日期（--full 強制完整）→ 通知 → 產生日曆頁
   python run.py watch     只抓 monitors 裡的日期 → 通知（建議每 30–60 分鐘）
   python run.py deals     只檢查優惠 RSS
   python run.py report    只重產日曆頁
@@ -67,8 +67,9 @@ def target_dates(cfg, hotel, mode, db=None):
 
 async def collect(cfg, db, hotels, mode, fetch_day, targets=None):
     results = {}
-    if targets is not None:
-        hotels = [h for h in hotels if targets.get(h["id"])]
+    if targets is None:
+        targets = {h["id"]: target_dates(cfg, h, mode, db) for h in hotels}
+    hotels = [h for h in hotels if targets.get(h["id"])]   # 沒有要查的日期就不開瀏覽器、不連官網
     lo, hi = cfg.get("browser", {}).get("delay_seconds", [4, 9])
     demo = [h for h in hotels if h["chain"] == "demo"]
     real = [h for h in hotels if h["chain"] != "demo"]
@@ -81,7 +82,7 @@ async def collect(cfg, db, hotels, mode, fetch_day, targets=None):
         async with fetcher as f:
             for h in hs:
                 res = []
-                dates = sorted(targets[h["id"]]) if targets is not None else target_dates(cfg, h, mode, db)
+                dates = sorted(targets[h["id"]])
                 # 萬豪：先用價格月曆 API 一次查整段，失敗才逐日開網頁
                 if h["chain"] == "marriott" and hasattr(f, "marriott_range") and h.get("mode", "points") == "points" \
                         and not f.mar_blocked:
@@ -131,6 +132,7 @@ def main():
     ap.add_argument("-c", "--config", default="config.yaml")
     ap.add_argument("--fetch-day", default=date.today().isoformat())
     ap.add_argument("--no-publish", action="store_true", help="不上傳到 GitHub")
+    ap.add_argument("--full", action="store_true", help="daily 不管星期幾都跑完整 60 天")
     a = ap.parse_args()
 
     cfg = load(a.config)
@@ -159,6 +161,9 @@ def main():
     if a.cmd == "poll":
         return poll(a, cfg, db, hotels, by_id, pending)
 
+    if a.cmd == "daily" and not (a.full or weekly_full_due(db)):
+        a.cmd = "watch"   # 平常只查監控日期，完整 60 天每週日跑一次
+
     lock = Path(cfg.get("data_dir", "data")) / "run.lock"
     if a.cmd in ("daily", "watch", "ihg-dir"):
         lock.parent.mkdir(parents=True, exist_ok=True)
@@ -171,6 +176,8 @@ def main():
             refresh_ihg_dir(cfg, db, force=True)
         else:
             run_cmd(a, cfg, db, hotels, by_id)
+        if a.cmd == "daily":
+            db.mark_sent(f"full:{date.today()}")
         if a.cmd == "daily" and not a.no_publish and cfg.get("github", {}).get("repo"):
             refresh_ihg_dir(cfg, db)
     finally:
@@ -178,6 +185,12 @@ def main():
             lock.unlink(missing_ok=True)
     if a.cmd in ("daily", "watch"):
         ensure_poll_task()
+
+
+def weekly_full_due(db, today=None):
+    """週日第一次 daily 才跑完整 60 天；排程一天兩次，跑完後第二次就只查監控日期。"""
+    today = today or date.today()
+    return today.weekday() == 6 and not db.was_sent(f"full:{today}")
 
 
 def refresh_ihg_dir(cfg, db, force=False):
@@ -250,9 +263,6 @@ def request_targets(r, cfg, hotels, by_id, today):
     h = by_id.get(r.get("hotel"))
     if h and r.get("month"):
         ds = month_dates(r["month"], today)
-        if r.get("type") == "month":   # 60 天內由每日排程負責，這裡只補 60 天以後
-            lim = today + timedelta(days=int(h.get("days_ahead", cfg.get("days_ahead", 60))) - 1)
-            ds = {d for d in ds if d > lim}
         t.setdefault(h["id"], set()).update(ds)
     if r.get("type") == "open":
         for m in cfg.get("monitors", []):

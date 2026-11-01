@@ -110,14 +110,13 @@ assert set(captured) == {"a", "b"} and len(captured["a"]) == 60 and len(captured
 assert calls["drops"] == 2 and calls["published"] == 1, calls
 assert db.was_sent("req:r1") and not (tmp / "run.lock").exists()
 
-# month 只補 60 天以後，不跑降價檢查；60 天內的 month 直接完成、不抓
+# month 查整個月（包含 60 天內），不跑降價檢查
 calls["drops"] = 0
 m = (date.today() + timedelta(days=120)).strftime("%Y-%m")
 poll({"id": "r2", "type": "month", "hotel": "a", "month": m, "t": 0})
 assert set(captured) == {"a"} and calls["drops"] == 0 and db.was_sent("req:r2"), captured
-n = calls["collect"]
 poll({"id": "r2b", "type": "month", "hotel": "a", "month": date.today().strftime("%Y-%m"), "t": 0})
-assert calls["collect"] == n and db.was_sent("req:r2b"), calls
+assert captured["a"] and min(captured["a"]) == date.today() and db.was_sent("req:r2b"), captured
 
 # 被擋：IHG 完成、萬豪不標完成，寫入封鎖
 denied["on"] = True
@@ -174,6 +173,48 @@ poll({"id": "r8", "type": "open", "chains": ["marriott"], "t": 0})
 assert set(captured) == {"b"} and len(captured["b"]) == 1, captured
 
 test_collect()
+
+# 排程：週日第一次才完整
+sun = date(2026, 11, 8)
+assert run.weekly_full_due(db, sun) and not run.weekly_full_due(db, sun + timedelta(days=1))
+db.mark_sent(f"full:{sun}")
+assert not run.weekly_full_due(db, sun)
+
+# 沒有要查的日期：不開瀏覽器
+class NoBrowser:
+    def __init__(self, cfg):
+        raise AssertionError("不該開瀏覽器")
+saved_browser, run.BrowserFetcher = run.BrowserFetcher, NoBrowser
+db3 = DB(str(tmp / "w.db"))
+db3.save_quote(run.Quote("x", date.today(), 1, "pts", "ok"), args.fetch_day)
+assert asyncio.run(real_collect({"monitors": []}, db3, [{"id": "x", "name": "X", "chain": "ihg", "code": "XXXXX"}], "watch", args.fetch_day)) == {}
+run.BrowserFetcher = saved_browser
+
+# 優惠篩選
+from hotelmon import deals
+for t in ["IHG 15% Off Awards At Select New & Refreshed Hotels Through April 30, 2027",
+          "GHA Discovery Double Elite Qualifying Nights November 1 – December 31, 2026",
+          "Marriott Bonvoy Nightly Upgrade Awards: How To Earn & Redeem Them, Maximize Value",
+          "ALL Accor Greater China 3X Points + Instant Gold With Fast Track Until December 31, 2026",
+          "萬豪買點加碼 40% 優惠"]:
+    assert deals.is_useful(t), t
+for t in ["Massive Amadeus Hack Affecting Hundreds Of Thousands Of Passengers Across Multiple Airlines",
+          "Rant: Entire Residential Apartment Buildings Being Converted To Air BnB’s & Hotels",
+          "Weekly Review: October 31, 2026",
+          "Grand Hyatt Barcelona Becomes RIU Plaza Hotel On April 1, 2027",
+          "A sky-high Vegas bar, a chic new Marriott in South Africa and more hotel news",
+          "Compensation Clinic: Hyatt Hotels Dining Pre-Order System Fail During Dinner"]:
+    assert not deals.is_useful(t), t
+for t in ["Buy IHG One Rewards Points With 100% Bonus", "Alaska Mileage Plan Sale: Buy Miles", "British Airways Avios Sale",
+          "Mistake Fare: Tokyo To Paris", "Hyatt Status Match Offer", "ALL Accor 3X Points + Instant Gold With Fast Track"]:
+    assert deals.is_alert(t), t
+for t in ["GHA Discovery Double Elite Qualifying Nights", "How to earn and use an IHG annual lounge membership",
+          "Marriott Points Sale 40% Off", "Transfer Chase Points To IHG With 80% Bonus: Why It’s Not Worth It"]:
+    assert not deals.is_alert(t), t
+assert deals.translate("已是中文") == "已是中文"
+saved_get, deals.requests.get = deals.requests.get, lambda *a, **k: (_ for _ in ()).throw(RuntimeError("x"))
+assert deals.translate("offline") == "offline"
+deals.requests.get = saved_get
 
 # lock：程序還在才算忙；程序被中斷留下的 lock 不擋；舊格式依時間判斷
 import os, subprocess

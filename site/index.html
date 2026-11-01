@@ -158,7 +158,10 @@ nav.tabbar button.on{color:var(--accent)}
     <div class="search">
       <input id="q" type="search" placeholder="城市、品牌或飯店名（例：名古屋萬豪）" autocomplete="off" enterkeyhint="search">
     </div>
-    <div class="hint" id="qhint">萬豪可直接搜尋；IHG 請輸入 5 碼代碼或貼上 ihg.com 飯店網址</div>
+    <div class="seg" id="dirchain" role="tablist" aria-label="集團">
+      <button data-c="all">全部</button><button data-c="marriott">萬豪</button><button data-c="ihg">洲際</button>
+    </div>
+    <div class="hint" id="qhint">中文名稱由城市＋品牌組成，僅供參考。也可輸入 5 碼代碼或貼上官網網址</div>
     <div class="card hide" id="results"></div>
     <div class="sec-title">我的收藏 <small id="favcount"></small></div>
     <div class="card" id="favs"></div>
@@ -240,8 +243,23 @@ const ALIAS = {
   "雅樂軒":["aloft"],"福朋":["four points"],"艾美":["le meridien","méridien"],"傲途格":["autograph"],"臻品之選":["tribute"],"源宿":["element"],
   "萬楓":["fairfield"],"萬豪酒店式公寓":["residence inn"],"德爾塔":["delta"],"盖洛德":["gaylord"],"W酒店":["w "],"Moxy":["moxy"],
   "洲際":["intercontinental"],"金普頓":["kimpton"],"英迪格":["indigo"],"皇冠假日":["crowne plaza"],"假日":["holiday inn"],"華邑":["hualuxe"],
-  "麗晶":["regent"],"六善":["six senses"],"逸衡":["voco"]
+  "麗晶":["regent"],"六善":["six senses"],"逸衡":["voco"],"智選假日":["holiday inn express"]
 };
+/* 飯店的中文名：由英文名裡的城市＋品牌對照 ALIAS 組成（不是官方譯名） */
+const ZH_MAP = (()=>{
+  const city=[], brand=[], seen=new Set(), keys=Object.keys(ALIAS), split=keys.indexOf("萬豪");
+  keys.forEach((k,i)=>{ const t=ALIAS[k][0].trim().toLowerCase();
+    if (seen.has(t) || !/[一-鿿]/.test(k)) return;
+    seen.add(t); (i<split?city:brand).push([t,k]); });
+  const sort = a => a.sort((x,y)=>y[0].length-x[0].length);
+  return {city:sort(city), brand:sort(brand)};
+})();
+function zhName(name){
+  const nl = name.toLowerCase();
+  const hit = a => { for (const [t,k] of a){ const i=nl.indexOf(t); if (i>=0 && !/[a-z]/.test(nl[i-1]||"") && !/[a-z]/.test(nl[i+t.length]||"")) return k; } return ""; };
+  const c = hit(ZH_MAP.city), b = hit(ZH_MAP.brand);
+  return {zh:c+b, full:!!(c&&b)};
+}
 
 /* ---------- 狀態 ---------- */
 const $ = s => document.querySelector(s);
@@ -258,6 +276,8 @@ let curHotel = LS.get("hm-hotel", "");
 let selDay = null;
 let curMonth = todayStr.slice(0,7);
 let PMODE = LS.get("hm-pmode","points");
+let DIRCHAIN = LS.get("hm-dirchain","all");
+function setDirchain(c){ DIRCHAIN=c; LS.set("hm-dirchain",c); document.querySelectorAll("#dirchain button").forEach(b=>b.classList.toggle("on", b.dataset.c===c)); renderFavs(); if ($("#q").value.trim()) doSearch(); }
 const kfmt = n => n==null ? "" : (n>=1000 ? (n/1000).toFixed(n>=100000?0:1).replace(/\.0$/,"")+"k" : String(n));
 const twd = n => n==null ? "-" : "NT$ "+n.toLocaleString();
 function metric(x){ if (!x || x.s!=="ok") return null; return PMODE==="cash" ? (x.c ?? null) : x.p; }
@@ -338,6 +358,7 @@ function show(v){
   view = v; LS.set("hm-view", v);
   document.querySelectorAll("nav.tabbar button").forEach(b=>b.classList.toggle("on", b.dataset.v===v));
   ["home","cal","mon","deal"].forEach(x=>$("#v-"+x).classList.toggle("hide", x!==v));
+  $("#pmode").classList.toggle("hide", v==="home");
   closeSheet(); window.scrollTo(0,0);
 }
 document.querySelectorAll("nav.tabbar button").forEach(b=>b.onclick=()=>{ show(b.dataset.v); if (b.dataset.v==="cal") maybeFetchMonth(); });
@@ -378,13 +399,13 @@ async function doSearch(){
     const otherOk = otherTerms.every(t=>nl.includes(t) || c.toLowerCase()===t);
     return cityOk && otherOk && (cityTerms.length+iata.length+otherTerms.length>0);
   });
-  res = [...res.filter(r=>r[2]==="marriott").slice(0,40), ...res.filter(r=>r[2]==="ihg").slice(0,40)];
   let html = "";
   if (code && !res.some(([c])=>c===code)) html += addForm({chain:"ihg", code});
+  res = [...res.filter(r=>r[2]==="marriott").slice(0,40), ...res.filter(r=>r[2]==="ihg").slice(0,40)].filter(r=>DIRCHAIN==="all"||r[2]===DIRCHAIN);
   html += res.length ? res.map(([c,n,chain,path])=>{
-      const have = WL.hotels.some(h=>h.code===c && h.chain===chain);
-      return `<div class="row"><div class="main"><div class="t">${esc(n)}</div><div class="s"><span class="badge">${CHAIN[chain]}</span>${c}</div></div>
-        ${have ? '<span class="muted" style="font-size:13px">已收藏</span>' : `<button class="btn pri" data-add="${c}" data-name="${esc(n)}" data-chain="${chain}" data-path="${esc(path)}">收藏</button>`}</div>`;
+      const have = WL.hotels.some(h=>h.code===c && h.chain===chain), z = zhName(n);
+      return `<div class="row"><div class="main"><div class="t">${esc(z.zh||n)}</div><div class="s"><span class="badge">${CHAIN[chain]}</span>${c}${z.zh?" · "+esc(n):""}</div></div>
+        ${have ? '<span class="muted" style="font-size:13px">已收藏</span>' : `<button class="btn pri" data-add="${c}" data-name="${esc(z.full?z.zh:n)}" data-chain="${chain}" data-path="${esc(path)}">收藏</button>`}</div>`;
     }).join("") : (code ? "" : '<div class="empty-note">找不到符合的飯店。可輸入 5 碼代碼或貼上官網網址。</div>');
   box.innerHTML = html;
   box.querySelectorAll("[data-add]").forEach(b=>b.onclick=()=>addHotel({chain:b.dataset.chain, code:b.dataset.add, name:b.dataset.name, ihg_path:b.dataset.path}, b));
@@ -419,7 +440,9 @@ async function addHotel(h, btn){
 function renderFavs(){
   $("#favcount").textContent = WL.hotels.length ? `${WL.hotels.length} 間` : "";
   if (!WL.hotels.length){ $("#favs").innerHTML = '<div class="empty-note">還沒有收藏，先在上方搜尋飯店</div>'; return; }
-  $("#favs").innerHTML = WL.hotels.map(h=>{
+  const favs = WL.hotels.filter(h=>DIRCHAIN==="all"||h.chain===DIRCHAIN);
+  if (!favs.length){ $("#favs").innerHTML = '<div class="empty-note">這個集團還沒有收藏</div>'; return; }
+  $("#favs").innerHTML = favs.map(h=>{
     const d = dataHotel(h.id), mn = minOf(d);
     const sub = mn ? `最低 ${PMODE==="cash" ? twd(mn.min) : fmt(mn.min, mn.unit)}（${mn.dates.slice(0,2).map(x=>x.slice(5)).join("、")}）` : (d ? "目前沒有可訂日期" : "等待第一次抓價");
     return `<div class="row"><div class="main" data-open="${h.id}" style="cursor:pointer">
@@ -444,11 +467,11 @@ function addMonths(ym, n){ let [y,m]=ym.split("-").map(Number); m+=n; while(m>12
 function horizonStr(days){ const d=new Date(todayStr+"T00:00"); d.setDate(d.getDate()+days); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; }
 function isStale(x){ if (!x || !x.h || !x.h.length) return true; const last=x.h[x.h.length-1][0]; return last < horizonStr(-1); }
 function monthNeedsFetch(hid, ym){
-  // 60 天以外的日期：沒資料或超過一天沒更新就需要查
+  // 沒資料或超過一天沒更新就需要查（完整更新每週才一次，平常靠打開頁面補）
   const h = dataHotel(hid), days = h ? h.days : {};
-  const lim = horizonStr(DAYS_AHEAD-1), [y,m] = ym.split("-").map(Number), n = new Date(y,m,0).getDate();
+  const [y,m] = ym.split("-").map(Number), n = new Date(y,m,0).getDate();
   let need = 0, total = 0;
-  for (let d=1; d<=n; d++){ const k=`${ym}-${String(d).padStart(2,"0")}`; if (k<todayStr || k<=lim) continue; total++; if (isStale(days[k])) need++; }
+  for (let d=1; d<=n; d++){ const k=`${ym}-${String(d).padStart(2,"0")}`; if (k<todayStr) continue; total++; if (isStale(days[k])) need++; }
   return total>0 && need>total/3;
 }
 function renderCal(){
@@ -812,7 +835,7 @@ function renderMon(){
 
 /* ---------- 優惠 ---------- */
 function renderDeals(){
-  $("#deal").innerHTML = (DATA.deals||[]).length ? DATA.deals.map(d=>`<a class="deal" href="${esc(d.link)}" target="_blank" rel="noopener">${esc(d.title)}<small>${esc(d.source)} · ${esc(d.seen)}</small></a>`).join("")
+  $("#deal").innerHTML = (DATA.deals||[]).length ? DATA.deals.map(d=>`<a class="deal" href="${esc(d.link)}" target="_blank" rel="noopener">${esc(d.title)}${d.summary?`<small>${esc(d.summary)}</small>`:""}<small>${esc(d.source)} · ${esc(d.seen)}</small></a>`).join("")
     : '<div class="empty-note">目前沒有符合關鍵字的優惠文章</div>';
 }
 
@@ -827,7 +850,7 @@ function openSettings(msg){
     <div class="field"><input id="tok" type="password" placeholder="github_pat_…" autocomplete="off" value=""></div>
     <div class="btns">${has?'<button class="btn danger" id="tokDel">移除 token</button>':""}<button class="btn pri" id="tokSave">儲存並測試</button></div>
     <div class="sec-title" style="margin-top:18px">資料更新</div>
-    <div class="hint">IHG 由這個網頁直接查官網（不用 token，也不用開電腦），結果只存在這個瀏覽器，同一個月 15 分鐘內不重複查。萬豪由電腦查：每天 07:13、19:13 抓未來 60 天，每 30 分鐘檢查監控日期；切換到 60 天以後的月份時會請電腦查那個月。LINE 通知一律由電腦發送。「立即完整更新」會查所有收藏飯店未來 60 天；查太頻繁可能被萬豪暫時封鎖。</div>
+    <div class="hint">IHG 由這個網頁直接查官網（不用 token，也不用開電腦），結果只存在這個瀏覽器，同一個月 15 分鐘內不重複查。萬豪由電腦查：每 30 分鐘只查監控日期，每週日查一次未來 60 天；打開頁面或切換到超過一天沒更新的月份時，會請電腦查那個月。LINE 通知一律由電腦發送。「立即完整更新」會查所有收藏飯店未來 60 天；查太頻繁可能被萬豪暫時封鎖。</div>
     <div class="btns"><button class="btn" id="btnDaily">立即完整更新</button></div>
     <div class="btns"><button class="btn" id="sheetClose">關閉</button></div>`);
   $("#sheetClose").onclick = closeSheet;
@@ -847,6 +870,7 @@ $("#btnSettings").onclick = () => openSettings();
 /* ---------- 啟動 ---------- */
 function renderAll(){ renderFavs(); renderCal(); renderMon(); renderDeals(); $("#upd").textContent = DATA.updated ? "更新 "+DATA.updated.slice(5) : ""; }
 document.querySelectorAll("#pmode button").forEach(b=>b.onclick=()=>setPmode(b.dataset.m));
+document.querySelectorAll("#dirchain button").forEach(b=>{ b.onclick=()=>setDirchain(b.dataset.c); b.classList.toggle("on", b.dataset.c===DIRCHAIN); });
 let qTimer; $("#q").addEventListener("input", ()=>{ clearTimeout(qTimer); qTimer=setTimeout(doSearch, 250); });
 (async () => {
   await loadData();

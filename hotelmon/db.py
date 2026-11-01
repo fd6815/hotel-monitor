@@ -38,6 +38,11 @@ class DB:
             self.con.execute("ALTER TABLE prices ADD COLUMN cash INTEGER")
             self.con.execute("ALTER TABLE prices ADD COLUMN cash_unit TEXT")
             self.con.commit()
+        cols = {r[1] for r in self.con.execute("PRAGMA table_info(deals_seen)")}
+        if "title_zh" not in cols:
+            self.con.execute("ALTER TABLE deals_seen ADD COLUMN title_zh TEXT")
+            self.con.execute("ALTER TABLE deals_seen ADD COLUMN summary_zh TEXT")
+            self.con.commit()
 
     # ---- 房價 ----
     def save_quote(self, q, fetch_day: str):
@@ -91,11 +96,20 @@ class DB:
     def deal_seen(self, link: str) -> bool:
         return self.con.execute("SELECT 1 FROM deals_seen WHERE link=?", (link,)).fetchone() is not None
 
-    def add_deal(self, link, title, source, published, matched):
+    def add_deal(self, link, title, source, published, matched, title_zh=None, summary_zh=None):
         self.con.execute(
-            "INSERT OR IGNORE INTO deals_seen VALUES(?,?,?,?,?,?)",
-            (link, title, source, published, int(matched), now()),
+            "INSERT OR IGNORE INTO deals_seen(link,title,source,published,matched,seen_at,title_zh,summary_zh)"
+            " VALUES(?,?,?,?,?,?,?,?)",
+            (link, title, source, published, int(matched), now(), title_zh, summary_zh),
         )
+        self.con.commit()
+
+    def all_deals(self):
+        return self.con.execute("SELECT * FROM deals_seen").fetchall()
+
+    def update_deal(self, link, matched, title_zh, summary_zh):
+        self.con.execute("UPDATE deals_seen SET matched=?, title_zh=?, summary_zh=? WHERE link=?",
+                         (int(matched), title_zh, summary_zh, link))
         self.con.commit()
 
     def recent_deals(self, limit=30):

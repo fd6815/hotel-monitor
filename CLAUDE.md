@@ -10,10 +10,13 @@ GitHub：`fd6815/hotel-monitor`（公開）。手機網頁：https://fd6815.gith
 - `watch/watchlist.json`：收藏與監控（手機讀寫，電腦每次執行前讀）。`site/hotels-marriott.json`：萬豪清單（directory.yml 每週重建）。`site/hotels-ihg.json`：IHG 清單（`[[代碼, 品牌, 城市]]`，daily 每 30 天由電腦 Chrome 讀官網 sitemap 更新，`run.py ihg-dir` 可手動更新）。pages.yml：`site/**` 變動時部署。
 - GitHub Actions 雲端 IP 被萬豪、IHG 官網擋，電腦和手機（非雲端）才能抓。
 
+## 優惠情報（`hotelmon/deals.py`，關鍵字規則，不用 AI）
+每 30 分鐘隨 Watch 讀 RSS（config.yaml 的 `deals.feeds`）。網頁只留特價與優惠技巧；LINE 只傳 IHG／Avios／Alaska 點數特賣、bug 價、快速會籍匹配。翻譯用 Google 翻譯免費端點（非官方，失敗顯示原文）。
+
 ## 排程（需開機且登入，`data\run.lock` 防重複，90 分鐘逾時）
 | 名稱 | 時間 | 內容 | log |
 |---|---|---|---|
-| HotelMon Daily AM/PM | 07:13、19:13 | 收藏飯店未來 60 天＋監控日期 | `data\daily.log` |
+| HotelMon Daily AM/PM | 07:13、19:13 | 週日第一次跑完整 60 天（`--full` 強制），其他時間等同 Watch | `data\daily.log` |
 | HotelMon Watch | :13、:43 | 只查監控日期；沒資料的新飯店抓 60 天 | `data\watch.log` |
 | HotelMon Poll | 每 1 分 | 處理手機請求，沒請求就安靜結束 | `data\poll.log` |
 
