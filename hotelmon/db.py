@@ -33,13 +33,19 @@ class DB:
         self.con = sqlite3.connect(path)
         self.con.row_factory = sqlite3.Row
         self.con.executescript(SCHEMA)
+        cols = {r[1] for r in self.con.execute("PRAGMA table_info(prices)")}
+        if "cash" not in cols:
+            self.con.execute("ALTER TABLE prices ADD COLUMN cash INTEGER")
+            self.con.execute("ALTER TABLE prices ADD COLUMN cash_unit TEXT")
+            self.con.commit()
 
     # ---- 房價 ----
     def save_quote(self, q, fetch_day: str):
         self.con.execute(
-            "INSERT OR REPLACE INTO prices VALUES(?,?,?,?,?,?,?,?)",
+            "INSERT OR REPLACE INTO prices(hotel,stay_date,fetch_day,price,unit,status,note,fetched_at,cash,cash_unit)"
+            " VALUES(?,?,?,?,?,?,?,?,?,?)",
             (q.hotel, q.stay_date.isoformat(), fetch_day, q.price, q.unit,
-             q.status, q.note, now()),
+             q.status, q.note, now(), getattr(q, "cash", None), getattr(q, "cash_unit", None)),
         )
         self.con.commit()
 
@@ -69,6 +75,10 @@ class DB:
     def mark_sent(self, key: str):
         self.con.execute("INSERT OR REPLACE INTO alerts_sent VALUES(?,?)", (key, now()))
         self.con.commit()
+
+    def recent_keys(self, prefix: str, limit=60):
+        return [r["key"] for r in self.con.execute(
+            "SELECT key FROM alerts_sent WHERE key LIKE ? ORDER BY sent_at DESC LIMIT ?", (prefix + "%", limit))]
 
     # ---- 優惠 ----
     def deals_count(self) -> int:

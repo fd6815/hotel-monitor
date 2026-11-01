@@ -1,4 +1,4 @@
-"""把日曆頁推到 GitHub repo 的 site/index.html，GitHub Actions 再部署到 Pages 讓手機看。
+"""把房價資料推到 GitHub repo 的 site/data.json，GitHub Actions 再部署到 Pages 讓手機看。
 
 需要 GitHub fine-grained token（只給該 repo 的 Contents: Read and write），
 放在 config.yaml 的 github.token，或環境變數 GITHUB_TOKEN，或檔案 data/github_token.txt。
@@ -19,14 +19,14 @@ def _token(cfg):
     return t
 
 
-def publish(cfg, html_path: Path):
+def publish(cfg, file_path: Path):
     gh = cfg.get("github") or {}
     repo = gh.get("repo")
     token = _token(cfg)
     if not repo or not token:
         print("[publish] 未設定 github.repo 或 token，略過上傳")
         return False
-    path = gh.get("path", "site/index.html")
+    path = gh.get("data_path", "site/data.json")
     api = f"https://api.github.com/repos/{repo}/contents/{path}"
     h = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"}
     try:
@@ -35,8 +35,8 @@ def publish(cfg, html_path: Path):
         if r.status_code == 200:
             sha = r.json().get("sha")
         body = {
-            "message": "更新房價日曆",
-            "content": base64.b64encode(html_path.read_bytes()).decode(),
+            "message": "更新房價資料",
+            "content": base64.b64encode(file_path.read_bytes()).decode(),
             "branch": gh.get("branch", "main"),
         }
         if sha:

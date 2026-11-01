@@ -25,6 +25,8 @@ class Quote:
     unit: str | None
     status: str          # ok / sold_out / error
     note: str = ""
+    cash: int | None = None        # 同日最低現金價（未稅）
+    cash_unit: str | None = None   # 幣別，例如 JPY、TWD
 
 
 IHG_API_KEY = "hsL8GAAz7drdIbEjBCejdA1Ud2MVhxoo"   # ihg.com 網頁前端公開使用的金鑰
@@ -56,6 +58,8 @@ SOLD_OUT = re.compile(
     r"no rates (?:are )?available|無空房|已售完|已客滿|满房|無可用房",
     re.I,
 )
+MAR_CASH = re.compile(r"Rates from\s*([\d,]{3,})\s*([A-Z]{3})\s*/\s*Night", re.I)
+MAR_CASH2 = re.compile(r"(?:¥|JPY|TWD|NT\$|USD|\$|THB|KRW|HKD|SGD|EUR|€)\s?([\d,]{3,})(?:\.\d+)?\s*(?:[A-Z]{3})?\s*/\s*Night", re.I)
 MAR_POINTS = re.compile(r"(\d{1,3}(?:,\d{3})+|\d{4,7})\s*Points\s*/\s*Stay", re.I)
 POINTS = re.compile(r"(\d{1,3}(?:,\d{3})+|\d{4,7})\s*(?:points?|pts|點數|點|積分|积分)", re.I)
 CASH = re.compile(
@@ -77,10 +81,11 @@ CHROME_CANDIDATES = [
 ]
 
 
-def build_url(hotel: dict, d: date, adults: int) -> str:
+def build_url(hotel: dict, d: date, adults: int, points: bool | None = None) -> str:
     tpl = hotel.get("url_template") or TEMPLATES[hotel["chain"]]
     co = d + timedelta(days=1)
-    points = hotel.get("mode", "points") == "points"
+    if points is None:
+        points = hotel.get("mode", "points") == "points"
     return tpl.format(
         code=hotel.get("code", ""), adults=adults,
         ci=d.isoformat(), co=co.isoformat(),
@@ -158,21 +163,27 @@ def parse_ihg(hotel: dict, d: date, status: int, text: str) -> Quote:
             v = po.get("totalPoints") or po.get("averageDailyPoints")
             if v:
                 pts.append(int(v))
+        cash, cur = _ihg_cash(h, offers, hotel)
         if pts:
-            return Quote(hid, d, min(pts), "pts", "ok")
-        return Quote(hid, d, None, None, "sold_out", "無積分房")
+            return Quote(hid, d, min(pts), "pts", "ok", cash=cash, cash_unit=cur)
+        return Quote(hid, d, None, None, "sold_out", "無積分房", cash=cash, cash_unit=cur)
+    cash, cur = _ihg_cash(h, offers, hotel)
+    if cash:
+        return Quote(hid, d, cash, cur, "ok", "未稅", cash=cash, cash_unit=cur)
+    return Quote(hid, d, None, None, "sold_out")
+
+
+def _ihg_cash(h, offers, hotel):
     cur = h.get("propertyCurrency", hotel.get("currency", ""))
     vals = []
     for o in offers:
-        if o.get("ratePlanCode") == "IVANI":
+        if o.get("ratePlanCode") == "IVANI" or o.get("availableStatus", "AVAILABLE") != "AVAILABLE":
             continue
         try:
             vals.append(round(float(o["totalRate"]["amountBeforeTax"])))
         except Exception:  # noqa: BLE001
             pass
-    if vals:
-        return Quote(hid, d, min(vals), cur, "ok", "未稅")
-    return Quote(hid, d, None, None, "sold_out")
+    return (min(vals), cur) if vals else (None, None)
 
 
 class BrowserFetcher:
@@ -253,6 +264,41 @@ class BrowserFetcher:
         return parse_ihg(hotel, d, res["status"], res["text"])
 
     async def _page(self, hotel, d):
+        q = await self._page_once(hotel, d)
+        if hotel["chain"] == "marriott" and hotel.get("mode", "points") == "points" and hotel.get("cash", True) \
+                and q.status != "error":
+            await asyncio.sleep(random.uniform(5, 9))
+            try:
+                cash, cur = await self._marriott_cash(hotel, d)
+                q.cash, q.cash_unit = cash, cur
+            except Exception as e:  # noqa: BLE001
+                print(f"  [cash] {hotel['name']} {d} 現金價失敗：{e!s:.80}")
+        return q
+
+    async def _marriott_cash(self, hotel, d):
+        p = self.page
+        await p.goto(build_url(hotel, d, self.cfg.get("adults", 2), points=False),
+                     wait_until="domcontentloaded", timeout=45000)
+        text = ""
+        for i in range(15):
+            await p.wait_for_timeout(2000)
+            if "access denied" in (await p.title()).lower():
+                return None, None
+            text = await p.inner_text("body")
+            vals = [(int(n.replace(",", "")), c.upper()) for n, c in MAR_CASH.findall(text)]
+            if not vals:
+                cur = "JPY" if ("¥" in text or "JPY" in text) else None
+                vals = [(int(n.replace(",", "")), cur) for n in MAR_CASH2.findall(text)]
+            vals = [v for v in vals if v[0] >= 100]
+            if vals:
+                return min(vals)
+            if i >= 5 and SOLD_OUT.search(text):
+                return None, None
+        self.debug_dir.mkdir(parents=True, exist_ok=True)
+        (self.debug_dir / f"cash_{hotel['id']}_{d}.txt").write_text(f"{p.url}\n\n{text[:3000]}", encoding="utf-8")
+        return None, None
+
+    async def _page_once(self, hotel, d):
         url = build_url(hotel, d, self.cfg.get("adults", 2))
         timeout = int(self.b.get("page_timeout", 45))
         p = self.page
@@ -314,5 +360,6 @@ class DemoFetcher:
         weekend = step * 6 if d.weekday() in (4, 5) else 0
         p = base + weekend + base_rnd.randint(-5, 5) * step + day_rnd.choice([-2, -1, 0, 0, 0, 0, 1, 2]) * step
         unit = "pts" if hotel.get("mode", "points") == "points" else hotel.get("currency", "TWD")
+        cash = int((p * 0.55 + base_rnd.randint(-8, 8) * 600) / 100) * 100   # 模擬現金價（日圓）
         await asyncio.sleep(0)
-        return Quote(hotel["id"], d, p, unit, "ok")
+        return Quote(hotel["id"], d, p, unit, "ok", cash=cash, cash_unit="JPY")

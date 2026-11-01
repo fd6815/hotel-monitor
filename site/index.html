@@ -26,9 +26,19 @@ body{background:var(--bg);color:var(--ink);
   -webkit-font-smoothing:antialiased;padding-bottom:calc(64px + env(safe-area-inset-bottom))}
 button,input,select{font:inherit;color:inherit}
 .wrap{max-width:720px;margin:0 auto;padding:0 16px 24px}
-header{position:sticky;top:0;z-index:5;background:var(--bg);padding:12px 16px 8px;margin:0 -16px;display:flex;align-items:center;gap:8px}
+header{display:flex;align-items:center;gap:8px}
 header h1{font-size:19px;margin:0;flex:1;letter-spacing:.02em}
 .upd{color:var(--muted);font-size:12px}
+.seg{display:flex;background:var(--chip);border-radius:10px;padding:2px;margin:0 -0px 4px}
+.seg button{flex:1;border:0;background:none;padding:7px 0;border-radius:8px;font-size:14px;color:var(--muted);cursor:pointer}
+.seg button.on{background:var(--card);color:var(--ink);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.topbar{position:sticky;top:0;z-index:5;background:var(--bg);margin:0 -16px;padding:0 16px 6px}
+.cell .p b{font-weight:800}
+.cell .q{font-size:10.5px;color:var(--muted);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.cell.lowest .q{color:#fff}
+.good{display:inline-block;font-size:11px;padding:1px 6px;border-radius:6px;background:var(--accent);color:var(--accent-ink);margin-left:6px;vertical-align:2px}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin-top:10px;font-size:14px}
+.kv dt{color:var(--muted)} .kv dd{margin:0;text-align:right;font-variant-numeric:tabular-nums}
 .iconbtn{border:0;background:none;padding:6px;cursor:pointer;color:var(--muted);display:flex}
 .iconbtn svg{width:22px;height:22px}
 nav.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:8;background:var(--card);border-top:1px solid var(--line);
@@ -67,11 +77,19 @@ nav.tabbar button.on{color:var(--accent)}
 .sum .best b{font-size:20px;color:var(--accent);font-variant-numeric:tabular-nums}
 .legend{display:flex;flex-wrap:wrap;gap:10px;color:var(--muted);font-size:12px;margin-top:10px}
 .legend i{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-2px;margin-right:4px}
-.month h2{font-size:16px;margin:20px 0 8px;text-align:center;font-weight:600}
-.grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+.monthbar{display:flex;align-items:center;justify-content:space-between;margin:16px 0 8px}
+.monthbar h2{font-size:17px;margin:0;font-weight:600}
+.monthbar button{border:1px solid var(--line);background:var(--card);border-radius:10px;width:42px;height:36px;font-size:18px;cursor:pointer}
+.monthbar button:disabled{opacity:.3;cursor:default}
+.status{font-size:13px;color:var(--muted);margin:6px 0 2px;min-height:18px}
+.status.busy{color:var(--accent)}
+.status .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--accent);margin-right:6px;animation:pulse 1.2s infinite}
+@keyframes pulse{50%{opacity:.25}}
+.cell .p.na{color:var(--muted)}
+.grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px}
 .dow{text-align:center;font-size:12px;color:var(--muted);padding:4px 0}
 .dow.we{color:var(--weekend)}
-.cell{min-height:62px;border-radius:8px;padding:5px 1px 4px;text-align:center;cursor:pointer;
+.cell{min-width:0;overflow:hidden;min-height:62px;border-radius:8px;padding:5px 1px 4px;text-align:center;cursor:pointer;
   display:flex;flex-direction:column;align-items:center;gap:1px;border:1px solid transparent;background:none}
 .cell.blank{cursor:default}
 .cell .d{font-size:15px}
@@ -122,13 +140,18 @@ nav.tabbar button.on{color:var(--accent)}
 </head>
 <body>
 <div class="wrap">
-  <header>
+  <div class="topbar">
+  <header style="position:static;margin:0;padding:12px 0 8px">
     <h1 id="title">房價監控</h1>
     <span class="upd" id="upd"></span>
     <button class="iconbtn" id="btnSettings" aria-label="設定">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
     </button>
   </header>
+  <div class="seg" id="pmode" role="tablist" aria-label="價格顯示">
+    <button data-m="points">點數</button><button data-m="cash">現金</button><button data-m="both">點數＋現金</button>
+  </div>
+  </div>
 
   <!-- 搜尋／收藏 -->
   <section id="v-home">
@@ -146,11 +169,12 @@ nav.tabbar button.on{color:var(--accent)}
     <div class="chips" id="chips"></div>
     <div class="card sum" id="sum"></div>
     <div class="legend">
-      <span><i style="background:var(--lowest)"></i>最低</span>
+      <span><i style="background:var(--lowest)"></i>最低</span><span><b>粗體</b>＝點數划算</span><span>現金為台幣未稅</span>
       <span><i style="background:var(--low)"></i>偏低</span>
       <span class="up">漲</span><span class="down">降、新開</span><span class="sold">搶空</span>
-      <span>粗框＝監控中</span><span>點日期可加監控</span>
+      <span>粗框＝監控中</span><span>點日期可加監控</span><span>60 天後的月份切換時才查詢</span>
     </div>
+    <div class="status" id="status"></div>
     <div id="cal"></div>
   </section>
 
@@ -182,6 +206,8 @@ nav.tabbar button.on{color:var(--accent)}
 const REPO = "fd6815/hotel-monitor";
 const WL_PATH = "watch/watchlist.json";
 const DAYS_AHEAD = 60;
+const MAX_MONTHS = 12;
+const REQ_PATH = "watch/requests.json";
 const EMBED = null/*__DATA__*/;
 const CHAIN = {marriott:"萬豪", ihg:"IHG", hyatt:"凱悅", accor:"雅高"};
 
@@ -226,6 +252,12 @@ let WL = {hotels:[],monitors:[]}, WL_SHA = null;
 let DIR = null;      // 萬豪清單
 let curHotel = LS.get("hm-hotel", "");
 let selDay = null;
+let curMonth = todayStr.slice(0,7);
+let PMODE = LS.get("hm-pmode","points");
+const kfmt = n => n==null ? "" : (n>=1000 ? (n/1000).toFixed(n>=100000?0:1).replace(/\.0$/,"")+"k" : String(n));
+const twd = n => n==null ? "-" : "NT$ "+n.toLocaleString();
+function metric(x){ if (!x || x.s!=="ok") return null; return PMODE==="cash" ? (x.c ?? null) : x.p; }
+function setPmode(m){ PMODE=m; LS.set("hm-pmode",m); document.querySelectorAll("#pmode button").forEach(b=>b.classList.toggle("on", b.dataset.m===m)); renderAll(); }
 
 function toast(msg){ const t=$("#toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove("show"),2400); }
 function token(){ return LS.get("hm-token",""); }
@@ -287,10 +319,10 @@ function monState(m){
 }
 function minOf(h){
   if (!h) return null;
-  const ok = Object.entries(h.days||{}).filter(([d,x])=>d>=todayStr && x.s==="ok" && x.p!=null);
+  const ok = Object.entries(h.days||{}).filter(([d,x])=>d>=todayStr && metric(x)!=null);
   if (!ok.length) return null;
-  const min = Math.min(...ok.map(([,x])=>x.p));
-  return {min, unit: ok[0][1].u, dates: ok.filter(([,x])=>x.p===min).map(([d])=>d)};
+  const min = Math.min(...ok.map(([,x])=>metric(x)));
+  return {min, unit: PMODE==="cash" ? "NT$" : ok[0][1].u, dates: ok.filter(([,x])=>metric(x)===min).map(([d])=>d)};
 }
 
 /* ---------- 分頁 ---------- */
@@ -301,7 +333,7 @@ function show(v){
   ["home","cal","mon","deal"].forEach(x=>$("#v-"+x).classList.toggle("hide", x!==v));
   closeSheet(); window.scrollTo(0,0);
 }
-document.querySelectorAll("nav.tabbar button").forEach(b=>b.onclick=()=>show(b.dataset.v));
+document.querySelectorAll("nav.tabbar button").forEach(b=>b.onclick=()=>{ show(b.dataset.v); if (b.dataset.v==="cal") maybeFetchMonth(); });
 
 /* ---------- 搜尋 ---------- */
 function parseUrl(q){
@@ -382,7 +414,7 @@ function renderFavs(){
   if (!WL.hotels.length){ $("#favs").innerHTML = '<div class="empty-note">還沒有收藏，先在上方搜尋飯店</div>'; return; }
   $("#favs").innerHTML = WL.hotels.map(h=>{
     const d = dataHotel(h.id), mn = minOf(d);
-    const sub = mn ? `最低 ${fmt(mn.min, mn.unit)}（${mn.dates.slice(0,2).map(x=>x.slice(5)).join("、")}）` : (d ? "目前沒有可訂日期" : "等待第一次抓價");
+    const sub = mn ? `最低 ${PMODE==="cash" ? twd(mn.min) : fmt(mn.min, mn.unit)}（${mn.dates.slice(0,2).map(x=>x.slice(5)).join("、")}）` : (d ? "目前沒有可訂日期" : "等待第一次抓價");
     return `<div class="row"><div class="main" data-open="${h.id}" style="cursor:pointer">
         <div class="t">${esc(h.name)}</div><div class="s"><span class="badge">${CHAIN[h.chain]||h.chain}</span>${esc(h.code)}　${sub}</div></div>
       <label class="toggle" title="降價提示"><input type="checkbox" data-drop="${h.id}" ${h.alert_drop!==false?"checked":""}><span></span></label>
@@ -401,54 +433,150 @@ function renderFavs(){
 }
 
 /* ---------- 日曆 ---------- */
+function addMonths(ym, n){ let [y,m]=ym.split("-").map(Number); m+=n; while(m>12){m-=12;y++;} while(m<1){m+=12;y--;} return `${y}-${String(m).padStart(2,"0")}`; }
+function horizonStr(days){ const d=new Date(todayStr+"T00:00"); d.setDate(d.getDate()+days); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; }
+function isStale(x){ if (!x || !x.h || !x.h.length) return true; const last=x.h[x.h.length-1][0]; return last < horizonStr(-1); }
+function monthNeedsFetch(hid, ym){
+  // 60 天以外的日期：沒資料或超過一天沒更新就需要查
+  const h = dataHotel(hid), days = h ? h.days : {};
+  const lim = horizonStr(DAYS_AHEAD-1), [y,m] = ym.split("-").map(Number), n = new Date(y,m,0).getDate();
+  let need = 0, total = 0;
+  for (let d=1; d<=n; d++){ const k=`${ym}-${String(d).padStart(2,"0")}`; if (k<todayStr || k<=lim) continue; total++; if (isStale(days[k])) need++; }
+  return total>0 && need>total/3;
+}
 function renderCal(){
   const list = WL.hotels.length ? WL.hotels : DATA.hotels;
   if (!list.find(h=>h.id===curHotel)) curHotel = list[0] ? list[0].id : "";
   $("#chips").innerHTML = list.map(h=>`<button class="chip ${h.id===curHotel?"on":""}" data-id="${h.id}">${esc(h.name)}</button>`).join("");
-  $("#chips").querySelectorAll(".chip").forEach(c=>c.onclick=()=>{ curHotel=c.dataset.id; LS.set("hm-hotel",curHotel); closeSheet(); renderCal(); });
-  if (!curHotel){ $("#sum").innerHTML='<div class="empty-note" style="grid-column:1/-1">先到「搜尋收藏」加入飯店</div>'; $("#cal").innerHTML=""; return; }
+  $("#chips").querySelectorAll(".chip").forEach(c=>c.onclick=()=>{ curHotel=c.dataset.id; LS.set("hm-hotel",curHotel); closeSheet(); renderCal(); maybeFetchMonth(); });
+  if (!curHotel){ $("#sum").innerHTML='<div class="empty-note" style="grid-column:1/-1">先到「搜尋收藏」加入飯店</div>'; $("#cal").innerHTML=""; renderStatus(); return; }
   const wh = wlHotel(curHotel) || {}, h = dataHotel(curHotel);
   const days = h ? h.days : {};
-  const ok = Object.entries(days).filter(([d,x])=>d>=todayStr && x.s==="ok" && x.p!=null);
-  const prices = ok.map(([,x])=>x.p);
+  const ok = Object.entries(days).filter(([d,x])=>d>=todayStr && metric(x)!=null);
+  const prices = ok.map(([,x])=>metric(x));
   const min = prices.length ? Math.min(...prices) : null, max = prices.length ? Math.max(...prices) : null;
   const lowCut = min!=null ? min + (max-min)*0.2 : null;
   const unit = ok.length ? ok[0][1].u : "pts";
-  const mons = new Set(WL.monitors.filter(m=>m.hotel===curHotel && monState(m).state!=="expired" && monState(m).state!=="done").map(m=>m.date));
-  const best = ok.filter(([,x])=>x.p===min).map(([d])=>d);
+  const mons = new Set(WL.monitors.filter(m=>m.hotel===curHotel && !["expired","done"].includes(monState(m).state)).map(m=>m.date));
+  const best = ok.filter(([,x])=>metric(x)===min).map(([d])=>d);
+  const vr = h && h.value_range;
   $("#sum").innerHTML = `<div><div class="name">${esc(wh.name||h?.name||curHotel)}</div>
-      <div class="meta">${CHAIN[wh.chain]||h?.chain||""} ${esc(wh.code||h?.code||"")}${h&&h.last?" · 抓取 "+esc(h.last):" · 等待第一次抓價"}</div></div>
-    <div class="best">${min!=null?`<div class="meta">區間最低</div><b>${fmt(min,unit)}</b><div class="meta">${best.slice(0,3).map(d=>d.slice(5)).join("、")}${best.length>3?" 等":""}</div>`:""}</div>`;
-  const start = new Date(todayStr+"T00:00"), end = new Date(start); end.setDate(end.getDate()+DAYS_AHEAD-1);
-  Object.keys(days).forEach(d=>{ const x=new Date(d+"T00:00"); if (x>end) end.setTime(x.getTime()); });
-  let html = "";
-  for (let y=start.getFullYear(), m=start.getMonth(); y<end.getFullYear() || (y===end.getFullYear() && m<=end.getMonth()); m===11?(y++,m=0):m++){
-    html += `<div class="month"><h2>${y} 年 ${m+1} 月</h2><div class="grid">` +
-      ["日","一","二","三","四","五","六"].map((w,i)=>`<div class="dow ${i===0||i===6?"we":""}">${w}</div>`).join("");
-    const first = new Date(y,m,1).getDay(), n = new Date(y,m+1,0).getDate();
-    for (let i=0;i<first;i++) html += '<div class="cell blank"></div>';
-    for (let d=1; d<=n; d++){
-      const key = `${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
-      const wd = (first+d-1)%7, x = days[key];
-      let cls = "cell"+(wd===0||wd===6?" we":"")+(mons.has(key)?" mon":"")+(key===selDay?" sel":"");
-      if (key < todayStr){ html += `<div class="${cls} past"><span class="d">${d}</span></div>`; continue; }
-      let p="", c="";
-      if (x){
-        if (x.s==="sold_out" || x.s==="premium") c = '<span class="sold">搶空</span>';
-        else if (x.s==="ok" && x.p!=null){
-          p = String(x.p);
-          if (x.p===min) cls += " lowest"; else if (x.p<=lowCut) cls += " low";
+      <div class="meta">${CHAIN[wh.chain]||h?.chain||""} ${esc(wh.code||h?.code||"")}${h&&h.last?" · 抓取 "+esc(h.last):" · 等待第一次抓價"}</div>
+      ${vr?`<div class="meta">每萬點價值 NT$ ${vr[0].toLocaleString()}–${vr[1].toLocaleString()}</div>`:""}</div>
+    <div class="best">${min!=null?`<div class="meta">已查日期最低${PMODE==="cash"?"現金":""}</div><b>${PMODE==="cash"?twd(min):fmt(min,unit)}</b><div class="meta">${best.slice(0,3).map(d=>d.slice(5)).join("、")}${best.length>3?" 等":""}</div>`:""}</div>`;
+  const minM = todayStr.slice(0,7), maxM = addMonths(minM, MAX_MONTHS);
+  if (curMonth < minM) curMonth = minM; if (curMonth > maxM) curMonth = maxM;
+  const [y, mo] = curMonth.split("-").map(Number), m = mo-1;
+  const lim = horizonStr(DAYS_AHEAD-1);
+  let html = `<div class="monthbar"><button id="mPrev" ${curMonth<=minM?"disabled":""} aria-label="上個月">‹</button>
+    <h2>${y} 年 ${mo} 月</h2><button id="mNext" ${curMonth>=maxM?"disabled":""} aria-label="下個月">›</button></div><div class="grid">` +
+    ["日","一","二","三","四","五","六"].map((w,i)=>`<div class="dow ${i===0||i===6?"we":""}">${w}</div>`).join("");
+  const first = new Date(y,m,1).getDay(), n = new Date(y,m+1,0).getDate();
+  for (let i=0;i<first;i++) html += '<div class="cell blank"></div>';
+  for (let d=1; d<=n; d++){
+    const key = `${curMonth}-${String(d).padStart(2,"0")}`;
+    const wd = (first+d-1)%7, x = days[key];
+    let cls = "cell"+(wd===0||wd===6?" we":"")+(mons.has(key)?" mon":"")+(key===selDay?" sel":"");
+    if (key < todayStr){ html += `<div class="${cls} past"><span class="d">${d}</span></div>`; continue; }
+    let p="", c="", q="";
+    if (x){
+      if (x.s==="sold_out" || x.s==="premium") { c = '<span class="sold">搶空</span>'; if (PMODE!=="points" && x.c) q = kfmt(x.c); }
+      else if (x.s==="ok" && x.p!=null){
+        const pts = x.g ? `<b>${x.p}</b>` : String(x.p);
+        if (PMODE==="cash") p = x.c!=null ? x.c.toLocaleString() : '<span class="na">–</span>';
+        else p = pts;
+        if (PMODE==="both") q = x.c!=null ? "$"+kfmt(x.c) : "";
+        const mv = metric(x);
+        if (mv!=null){ if (mv===min) cls += " lowest"; else if (mv<=lowCut) cls += " low"; }
+        if (PMODE!=="cash"){
           if (x.new) c = '<span class="down">新開</span>';
           else if (x.delta>0) c = `<span class="up">漲${x.delta.toLocaleString()}</span>`;
           else if (x.delta<0) c = `<span class="down">降${(-x.delta).toLocaleString()}</span>`;
         }
       }
-      html += `<button class="${cls}" data-k="${key}"><span class="d">${d}</span><span class="p">${p}</span><span class="c">${c}</span></button>`;
-    }
-    html += "</div></div>";
+    } else if (key > lim) { p = '<span class="na">–</span>'; }
+    html += `<button class="${cls}" data-k="${key}"><span class="d">${d}</span><span class="p">${p}</span>${q?`<span class="q">${q}</span>`:""}<span class="c">${c}</span></button>`;
   }
+  html += "</div>";
   $("#cal").innerHTML = html;
   $("#cal").querySelectorAll(".cell[data-k]").forEach(b=>b.onclick=()=>openDay(b.dataset.k));
+  $("#mPrev").onclick = () => { curMonth = addMonths(curMonth,-1); closeSheet(); renderCal(); maybeFetchMonth(); };
+  $("#mNext").onclick = () => { curMonth = addMonths(curMonth, 1); closeSheet(); renderCal(); maybeFetchMonth(); };
+  renderStatus();
+}
+
+/* ---------- 請電腦即時更新 ---------- */
+let PENDING = (()=>{ try { return JSON.parse(LS.get("hm-pending","[]")); } catch(e){ return []; } })();
+function savePending(){ LS.set("hm-pending", JSON.stringify(PENDING)); }
+function renderStatus(){
+  const el = $("#status"); if (!el) return;
+  const mine = PENDING.filter(p=>p.hotel===curHotel || p.type==="open");
+  if (PENDING.length){
+    const p = PENDING[PENDING.length-1], mins = Math.max(0, Math.round((Date.now()-p.t)/60000));
+    const what = p.type==="open" ? "開頁更新" : `${hotelName(p.hotel)} ${p.month.replace("-"," 年 ")} 月`;
+    el.className = "status busy";
+    el.innerHTML = `<span class="dot"></span>更新中：${esc(what)}（已送出 ${mins} 分鐘，萬豪一個月約需 8 分鐘）`;
+  } else if (curHotel && monthNeedsFetch(curHotel, curMonth)) {
+    el.className = "status";
+    el.innerHTML = token() ? "這個月還沒查過" : `這個月還沒查過，<a href="#" id="needTok">設定 token</a> 後切換月份會自動查詢`;
+    const t = $("#needTok"); if (t) t.onclick = e => { e.preventDefault(); openSettings(); };
+  } else { el.className = "status"; el.textContent = ""; }
+}
+async function sendRequest(req){
+  if (!token()) return false;
+  req.id = Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+  req.t = Date.now();
+  const h = {"Accept":"application/vnd.github+json","Authorization":"Bearer "+token()};
+  for (let attempt=0; attempt<3; attempt++){
+    let list = [], sha;
+    const r = await fetch(`https://api.github.com/repos/${REPO}/contents/${REQ_PATH}?ref=main&t=${Date.now()}`, {headers:h, cache:"no-store"});
+    if (r.ok){ const j = await r.json(); sha = j.sha;
+      try { list = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(j.content.replace(/\n/g,"")), c=>c.charCodeAt(0)))); } catch(e){ list = []; } }
+    else if (r.status !== 404) return false;
+    list = list.filter(x => Date.now() - x.t < 6*3600*1000).slice(-30);
+    list.push(req);
+    const body = {message:`更新請求 ${req.type} ${req.month||""}`, branch:"main",
+      content: btoa(String.fromCharCode(...new TextEncoder().encode(JSON.stringify(list))))};
+    if (sha) body.sha = sha;
+    const w = await fetch(`https://api.github.com/repos/${REPO}/contents/${REQ_PATH}`, {method:"PUT", headers:{...h,"Content-Type":"application/json"}, body:JSON.stringify(body)});
+    if (w.ok){ PENDING.push(req); savePending(); renderStatus(); watchPending(); return true; }
+    if (w.status !== 409 && w.status !== 422) return false;
+  }
+  return false;
+}
+function recentlyRequested(key, ms){ const t = +LS.get(key, 0); return Date.now()-t < ms; }
+let monthTimer = null;
+function maybeFetchMonth(){ clearTimeout(monthTimer); renderStatus(); monthTimer = setTimeout(doFetchMonth, 1500); }
+async function doFetchMonth(){
+  if (!curHotel || !token() || !monthNeedsFetch(curHotel, curMonth)) { renderStatus(); return; }
+  const key = `hm-req:${curHotel}:${curMonth}`;
+  if (recentlyRequested(key, 2*3600*1000) || PENDING.some(p=>p.hotel===curHotel && p.month===curMonth)) { renderStatus(); return; }
+  LS.set(key, Date.now());
+  if (await sendRequest({type:"month", hotel:curHotel, month:curMonth})) toast("已請電腦查詢這個月");
+}
+async function requestOnOpen(){
+  if (!token() || !curHotel || recentlyRequested("hm-req:open", 15*60*1000)) return;
+  LS.set("hm-req:open", Date.now());
+  await sendRequest({type:"open", hotel:curHotel, month:curMonth});
+}
+let watchTimer = null;
+function watchPending(){
+  if (watchTimer || !PENDING.length) return;
+  watchTimer = setInterval(async ()=>{
+    PENDING = PENDING.filter(p => Date.now()-p.t < 6*3600*1000);
+    if (!PENDING.length){ clearInterval(watchTimer); watchTimer=null; savePending(); renderStatus(); return; }
+    try {
+      const r = await fetch("data.json?t="+Date.now(), {cache:"no-store"});
+      if (r.ok){
+        const d = await r.json();
+        const done = new Set(d.requests_done||[]);
+        const before = PENDING.length;
+        PENDING = PENDING.filter(p=>!done.has(p.id)); savePending();
+        if (PENDING.length < before || d.updated !== DATA.updated){ DATA = d; renderAll(); if (PENDING.length < before) toast("房價已更新"); }
+      }
+    } catch(e){}
+    renderStatus();
+  }, 20000);
 }
 
 function spark(hist){
@@ -474,7 +602,7 @@ function openDay(k){
   if (x){
     if (x.s==="sold_out") price = `<span class="sold">搶空</span>`;
     else if (x.s==="premium") price = `<span class="sold">搶空</span>`;
-    else price = fmt(x.p, x.u);
+    else price = PMODE==="cash" && x.c!=null ? twd(x.c) : fmt(x.p, x.u) + (x.g?'<span class="good">划算</span>':'');
     if (x.s==="premium") change = `<span class="muted">標準房已滿，只剩高階房 ${fmt(x.p,x.u)}</span>`;
     else if (x.n) change = `<span class="muted">${esc(x.n)}</span>`;
     if (x.new) change = '<span class="down">由搶空轉為有房</span>';
@@ -488,6 +616,11 @@ function openDay(k){
       <div><h3>${esc(wh.name||h?.name||"")}</h3><div class="hist">${k}（${wd}）入住 1 晚</div></div>
       <div class="big">${price}</div></div>
     <div style="margin-top:4px;font-size:13.5px">${change}</div>
+    ${x ? `<dl class="kv">
+      <dt>點數</dt><dd>${x.s==="ok"||x.s==="premium" ? fmt(x.p,x.u) : "搶空"}</dd>
+      <dt>現金（未稅）</dt><dd>${x.cn!=null ? `${esc(x.cu||"")} ${x.cn.toLocaleString()}　≈ ${twd(x.c)}` : "—"}</dd>
+      <dt>每萬點價值</dt><dd>${x.v ? "NT$ "+x.v.toLocaleString()+(x.g?'<span class="good">划算</span>':"") : "—"}</dd>
+    </dl>` : ""}
     ${x ? spark(x.h) : ""}
     <div class="hist">${hist}</div>
     <div class="sec-title" style="margin-top:16px">${mon ? "監控中" : "加入監控"}<small>低於門檻時 LINE 通知</small></div>
@@ -523,7 +656,7 @@ function renderMon(){
       <span class="tag ${state}">${st[state]}</span>
       <button class="btn ghost danger" data-mdel="${i}" aria-label="刪除">✕</button></div>`;
   }).join("");
-  $("#mon").querySelectorAll("[data-goto]").forEach(e=>e.onclick=()=>{ const m=list[+e.dataset.goto]; curHotel=m.hotel; LS.set("hm-hotel",curHotel); show("cal"); renderCal(); openDay(m.date); });
+  $("#mon").querySelectorAll("[data-goto]").forEach(e=>e.onclick=()=>{ const m=list[+e.dataset.goto]; curHotel=m.hotel; LS.set("hm-hotel",curHotel); curMonth=m.date.slice(0,7); show("cal"); renderCal(); openDay(m.date); });
   $("#mon").querySelectorAll("[data-mdel]").forEach(e=>e.onclick=()=>{
     const m = list[+e.dataset.mdel];
     if (!confirm(`刪除 ${m.date} ${hotelName(m.hotel)} 的監控？`)) return;
@@ -548,7 +681,7 @@ function openSettings(msg){
     <div class="field"><input id="tok" type="password" placeholder="github_pat_…" autocomplete="off" value=""></div>
     <div class="btns">${has?'<button class="btn danger" id="tokDel">移除 token</button>':""}<button class="btn pri" id="tokSave">儲存並測試</button></div>
     <div class="sec-title" style="margin-top:18px">資料更新</div>
-    <div class="hint">你的電腦每天 07:13、19:13 抓完整 60 天日曆，每 30 分鐘檢查監控日期。新收藏的飯店會在下一次檢查時開始抓。</div>
+    <div class="hint">你的電腦每天 07:13、19:13 抓未來 60 天，每 30 分鐘檢查監控日期。打開這個網頁時會請電腦更新一次（15 分鐘內不重複）；切換到 60 天以後的月份時，會請電腦查那個月。新收藏的飯店會在下一次檢查時開始抓。</div>
     <div class="btns"><button class="btn" id="sheetClose">關閉</button></div>`);
   $("#sheetClose").onclick = closeSheet;
   $("#tokSave").onclick = async () => {
@@ -565,12 +698,17 @@ $("#btnSettings").onclick = () => openSettings();
 
 /* ---------- 啟動 ---------- */
 function renderAll(){ renderFavs(); renderCal(); renderMon(); renderDeals(); $("#upd").textContent = DATA.updated ? "更新 "+DATA.updated.slice(5) : ""; }
+document.querySelectorAll("#pmode button").forEach(b=>b.onclick=()=>setPmode(b.dataset.m));
 let qTimer; $("#q").addEventListener("input", ()=>{ clearTimeout(qTimer); qTimer=setTimeout(doSearch, 250); });
 (async () => {
   await loadData();
   await loadWatchlist();
+  document.querySelectorAll("#pmode button").forEach(b=>b.classList.toggle("on", b.dataset.m===PMODE));
   show(view);
   renderAll();
+  watchPending();
+  requestOnOpen();
+  if (view==="cal") maybeFetchMonth();
 })();
 </script>
 </body>
