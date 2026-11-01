@@ -22,4 +22,4 @@
 ## 手機請求（watch/requests.json）
 - `open`：查監控日期，有帶 hotel/month 時加查該月。`month`：只補 60 天以後。`daily`：未來 60 天＋監控日期，並檢查降價。
 - `chains` 限定集團（網頁已自己查 IHG 時只送 `["marriott"]`）。
-- 抓取失敗（`alerts.hotel_failed`：出錯 3 筆以上或全部出錯）時請求不算完成：該集團暫停 30 分鐘（`blocked:<chain>`，data.json 的 `blocked` 讓網頁顯示重試時間），之後 poll 只重試還沒成功的飯店（`reqh:<id>:<hotel>`），超過 6 小時放棄。任一次 daily／watch／poll 成功就解除。
+- 抓取失敗（`alerts.hotel_failed`：出錯 3 筆以上或全部出錯）時請求不算完成：該集團暫停（`blocked:<chain>`，最短 30 分鐘，間隔等於已被擋多久，最長 6 小時，daily／watch 也遵守；data.json 的 `blocked` 讓網頁顯示重試時間），之後 poll 只重試還沒成功的飯店（`reqh:<id>:<hotel>`），超過 6 小時放棄。任一次 daily／watch／poll 成功就解除。

@@ -174,6 +174,19 @@ assert set(captured) == {"b"} and len(captured["b"]) == 1, captured
 
 test_collect()
 
+# 封鎖重試間隔：最短 30 分鐘，隨被擋時間拉長，最長 6 小時；排程也會跳過
+db4 = DB(str(tmp / "b.db"))
+stamp = lambda m: (datetime.now() - timedelta(minutes=m)).strftime("%Y-%m-%d %H:%M")
+def held(minutes):
+    db4.con.execute("INSERT OR REPLACE INTO alerts_sent VALUES('blocked:marriott',?)", (stamp(0),))
+    db4.con.execute("INSERT OR REPLACE INTO alerts_sent VALUES('blocked-since:marriott',?)", (stamp(minutes),))
+    db4.con.commit()
+    return round((alerts.blocked_chains(db4)["marriott"] - datetime.now()).total_seconds() / 60)
+assert 28 <= held(0) <= 30 and 118 <= held(120) <= 120 and 358 <= held(1000) <= 360
+assert alerts.not_blocked(db4, hotels) == [hotels[0]]
+alerts.update_blocks(db4, hotels, {"b": [Q()]})
+assert not db4.was_sent("blocked-since:marriott") and alerts.not_blocked(db4, hotels) == hotels
+
 # 排程：週日第一次才完整
 sun = date(2026, 11, 8)
 assert run.weekly_full_due(db, sun) and not run.weekly_full_due(db, sun + timedelta(days=1))
@@ -211,6 +224,11 @@ for t in ["Buy IHG One Rewards Points With 100% Bonus", "Alaska Mileage Plan Sal
 for t in ["GHA Discovery Double Elite Qualifying Nights", "How to earn and use an IHG annual lounge membership",
           "Marriott Points Sale 40% Off", "Transfer Chase Points To IHG With 80% Bonus: Why It’s Not Worth It"]:
     assert not deals.is_alert(t), t
+for t in ["[限時優惠] 花旗卡點數兌換方案", "SAS北歐航空正夯，新手一路配對篇！", "IHG的里程碑：餐券到底怎麼用？值不值得換？", "2026/10月份的酒店會籍總整理來囉！"]:
+    assert deals.is_useful(t), t
+for t in ["開箱名古屋萬豪酒店(Nagoya Marriott Assocla Hotel)！", "[Nana住宿紀錄] Hyatt Regency Chicago",
+          "Best-Ever Citi AAdvantage Executive Card 125K Bonus Miles Offer", "Am I eligible for the Chase Sapphire Preferred's 75,000-point bonus?"]:
+    assert not deals.is_useful(t), t
 assert deals.translate("已是中文") == "已是中文"
 saved_get, deals.requests.get = deals.requests.get, lambda *a, **k: (_ for _ in ()).throw(RuntimeError("x"))
 assert deals.translate("offline") == "offline"

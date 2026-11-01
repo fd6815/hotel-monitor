@@ -344,7 +344,7 @@ def run_cmd(a, cfg, db, hotels, by_id):
         if notify.send_line(cfg, "房價監控已連上 LINE。之後監控達標、降價、抓取失敗都會傳到這裡。"):
             db.mark_sent("line-hello")
     if a.cmd in ("daily", "watch"):
-        results = asyncio.run(collect(cfg, db, hotels, a.cmd, a.fetch_day))
+        results = asyncio.run(collect(cfg, db, alerts.not_blocked(db, hotels), a.cmd, a.fetch_day))
         alerts.update_blocks(db, hotels, results)
         msgs += alerts.check_monitors(db, cfg, by_id)
         for h in hotels:

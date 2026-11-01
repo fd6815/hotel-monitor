@@ -7,7 +7,8 @@ from datetime import date, datetime, timedelta
 
 from .fetchers import build_url
 
-BLOCK_MINUTES = 30   # 被官網擋之後，手機請求隔多久再重試
+BLOCK_MINUTES = 30      # 被官網擋之後，最短隔多久再重試
+BLOCK_MAX_MINUTES = 360 # 一直被擋就把間隔拉長（等於已被擋多久），最長 6 小時，避免重試延長封鎖
 
 
 def hotel_failed(results) -> bool:
@@ -25,14 +26,28 @@ def update_blocks(db, hotels, results):
     for chain, bad in failed.items():
         if bad:
             db.mark_sent("blocked:" + chain)
+            if not db.was_sent("blocked-since:" + chain):
+                db.mark_sent("blocked-since:" + chain)
         else:
             db.clear_sent("blocked:" + chain)
+            db.clear_sent("blocked-since:" + chain)
 
 
 def blocked_chains(db) -> dict:
     """{集團: 下次可重試時間}"""
-    return {k[8:]: datetime.strptime(db.was_sent(k), "%Y-%m-%d %H:%M") + timedelta(minutes=BLOCK_MINUTES)
-            for k in db.recent_keys("blocked:")}
+    out = {}
+    for k in db.recent_keys("blocked:"):
+        last = datetime.strptime(db.was_sent(k), "%Y-%m-%d %H:%M")
+        since = db.was_sent("blocked-since:" + k[8:])
+        held = (last - datetime.strptime(since, "%Y-%m-%d %H:%M")).total_seconds() / 60 if since else 0
+        out[k[8:]] = last + timedelta(minutes=min(BLOCK_MAX_MINUTES, max(BLOCK_MINUTES, held)))
+    return out
+
+
+def not_blocked(db, hotels) -> list:
+    """濾掉還在封鎖等待中的集團，排程也不再去碰。"""
+    wait = {c for c, t in blocked_chains(db).items() if t > datetime.now()}
+    return [h for h in hotels if h["chain"] not in wait]
 
 
 def fmt(price, unit):

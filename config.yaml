@@ -53,10 +53,10 @@ monitors:               # 指定日期，低於門檻通知一次後轉為「已
     date: 2026-12-06
     max_price: 65000
 
-deals:
+deals:   # 篩選規則在 hotelmon/deals.py
   feeds:
     - https://loyaltylobby.com/feed/
     - https://onemileatatime.com/feed/
     - https://thepointsguy.com/feed/
-  keywords: [marriott, bonvoy, ihg, hyatt, accor, flash sale, points sale, promotion, japan, taiwan, taipei, tokyo, nagoya]
-  exclude: [credit card review]
+    - https://blog.tripplus.cc/zh/feed
+    - https://vocus.cc/api/rss/user/683333f5fd89780001609ced/articles   # 方格子「旅程任意門」

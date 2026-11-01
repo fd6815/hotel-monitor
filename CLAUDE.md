@@ -34,7 +34,8 @@ GitHub：`fd6815/hotel-monitor`（公開）。手機網頁：https://fd6815.gith
 - 電腦和手機會持續 commit 到 main，push 前先 `git pull --rebase`。改 `.github/workflows` 需要 token 有 Workflows 權限，目前沒有。
 
 ## 待辦
-1. 萬豪解封後驗證：月曆 API 速度與點數、STANDARD 現金（不行就抓官網現金月曆頁 GraphQL）、網頁能否直接查（跨網域）。
+1. 萬豪月曆 API 從 2026-11-01 23:58 起持續 403：`default.mi` 頁面正常，只有 API 被擋，乾淨瀏覽器也一樣（11-02 02:22 實測），不是 Chrome 設定檔問題。重試間隔已改為最長 6 小時。解封後驗證：API 速度與點數、STANDARD 現金、網頁能否直接查。若長期不解封，改用官網實際頁面流程取得資料。
+5. 優惠來源「里程家」找不到網站，等使用者提供網址。
 2. 2026-11-02 00:22 的 poll 查台北洲際時瀏覽器中途關閉（Target page, context or browser has been closed），原因未查明，再發生要查。
 3. 監控門檻目前只有點數，可考慮加現金門檻。
 4. 目前收藏：名古屋萬豪 NGODT、台北洲際 TPEPI；監控：名古屋萬豪 2026-11-28 < 60000、台北洲際 2026-12-06 < 64000。

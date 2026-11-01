@@ -15,16 +15,18 @@ KEEP = re.compile(
     r"\bsale\b|% ?(off|bonus)|\bdiscount|\bpromo|\bdeals?\b|\bflash\b|\bdouble\b|\btriple\b|\b\dx\b|\bbonus\b|\bfree night"
     r"|mistake fare|error fare|error rate|pricing error|\bglitch\b|\bbug\b|status match|status challenge|fast track"
     r"|\bhow to\b|\bmaximi[sz]e|\btips?\b|\btricks?\b|\bsweet spot|\bworth it\b|\bloophole"
-    r"|特價|特賣|優惠|折扣|促銷|加碼|加贈|雙倍|三倍|回饋|買點|買里程|買哩程|錯價|BUG|會籍匹配|快速升級|攻略|技巧|教學|秘訣|甜蜜點|懶人包",
+    r"|特價|特賣|優惠|折扣|促銷|加碼|加贈|雙倍|三倍|回饋|返利|買點|買里程|買哩程|錯價|BUG|會籍|配對|快速升級|攻略|技巧|教學|秘訣|甜蜜點|懶人包|怎麼用|值不值",
     re.I)
 DROP = re.compile(
     r"\breview\b|\brant\b|compensation clinic|\bnews\b|\bbreach\b|\blawsuit\b|\bhack affect|\bbecomes\b|\bcredit card\b.*\bshould\b"
-    r"|trip report|\bopens?\b|\bopening\b|\bclosing\b|開幕|開箱|住宿心得|飛行紀錄",
+    r"|trip report|\bopens?\b|\bopening\b|\bclosing\b|\bcards?\b.*\b(bonus|welcome|status)\b|welcome (offer|bonus)|\bsapphire\b|\bamex\b"
+    r"|開幕|開箱|住宿心得|住宿紀錄|飛行紀錄|聯名信用卡|高額開卡",
     re.I)
 PROGRAM = re.compile(r"\bihg\b|\bavios\b|\balaska\b|\batmos\b|\bmileage plan\b|洲際|阿拉斯加", re.I)
 POINT_SALE = re.compile(r"\bsale\b|\bbuy\b|\bpurchase|% ?off|特賣|買點|買里程|買哩程|促銷", re.I)
 BUG = re.compile(r"mistake fare|error fare|error rate|pricing error|\bglitch\b|\bbug\b|錯價", re.I)
-STATUS_MATCH = re.compile(r"status match|status challenge|fast track|會籍匹配|快速升級", re.I)
+STATUS_MATCH = re.compile(r"status match|status challenge|fast track|會籍匹配|會籍配對|快速升級", re.I)
+SOURCE_NAME = {"blog.tripplus.cc": "Trip+", "vocus.cc": "旅程任意門"}
 CJK = re.compile(r"[一-鿿]")
 
 
@@ -76,14 +78,16 @@ def _items(xml_text: str):
 
 def reclassify(db):
     """規則改版時重新篩選舊文章（只做一次）。"""
-    if db.was_sent("deals-v2"):
+    if db.was_sent("deals-v3"):
         return
     for r in db.all_deals():
         keep = is_useful(r["title"])
-        db.update_deal(r["link"], keep, translate(r["title"]) if keep else None, None)
-        if keep:
+        zh = r["title_zh"]
+        if keep and not zh:
+            zh = translate(r["title"])
             time.sleep(0.3)
-    db.mark_sent("deals-v2")
+        db.update_deal(r["link"], keep, zh, r["summary_zh"])
+    db.mark_sent("deals-v3")
 
 
 def check_deals(db, cfg) -> list[str]:
@@ -101,6 +105,7 @@ def check_deals(db, cfg) -> list[str]:
             print(f"[deals] {url} 讀取失敗：{e}")
             continue
         src = re.sub(r"^https?://(www\.)?", "", url).split("/")[0]
+        src = SOURCE_NAME.get(src, src)
         first = not db.was_sent("deal-src:" + url)
         db.mark_sent("deal-src:" + url)
         for title, link, desc, pub in items[:40]:
