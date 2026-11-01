@@ -39,7 +39,7 @@ for _s in (sys.stdout, sys.stderr):
     except Exception:  # noqa: BLE001
         pass
 
-from hotelmon import alerts, deals, ihgdir, notify, publish, report, watchlist
+from hotelmon import alerts, deals, ihgdir, notify, publish, report, ustatz, watchlist
 from hotelmon.db import DB
 from hotelmon.fetchers import BrowserFetcher, DemoFetcher, Quote
 
@@ -65,30 +65,30 @@ def target_dates(cfg, hotel, mode, db=None):
     return sorted({today + timedelta(days=i) for i in range(n)} | mon)
 
 
-def marriott_dates(cfg, db, hotel, cap=15):
-    """萬豪開網頁查：監控日期＋未來 60 天裡最久沒更新的 cap 天（一次查太多會被封鎖）。"""
-    today = date.today()
-    dates = {date.fromisoformat(str(m["date"])) for m in cfg.get("monitors", [])
-             if m["hotel"] == hotel["id"] and str(m["date"]) >= today.isoformat()}
-    snaps = db.snapshots(hotel["id"], today.isoformat())
-    last = lambda d: snaps[d.isoformat()][0]["fetch_day"] if d.isoformat() in snaps else ""
-    days = [today + timedelta(days=i) for i in range(int(hotel.get("days_ahead", cfg.get("days_ahead", 60))))]
-    return dates | set(sorted((d for d in days if last(d) < today.isoformat()), key=lambda d: (last(d), d))[:cap])
-
-
-def schedule_targets(cfg, db, hotels, mode, now=None):
-    """排程這次要查的日期。萬豪（未開 marriott_api）每天 07:00 後只查一次。"""
+def update_marriott(cfg, db, hotels, fetch_day, now=None):
+    """萬豪（未開 marriott_api）每間飯店每天 07:00 後讀一次 ustatz，成功就不再讀；失敗照封鎖間隔重試。"""
     now = now or datetime.now()
-    due = now.hour >= 7 and not db.was_sent(f"mar:{now.date()}")
-    targets = {}
+    results = {}
+    if now.hour < 7 or cfg.get("marriott_api"):
+        return results
     for h in hotels:
-        if h["chain"] == "marriott" and not cfg.get("marriott_api"):
-            if due:
-                targets[h["id"]] = marriott_dates(cfg, db, h)
-                db.mark_sent(f"mar:{now.date()}")
-        else:
-            targets[h["id"]] = set(target_dates(cfg, h, mode, db))
-    return targets
+        key = f"mar:{now.date()}:{h['id']}"
+        if h["chain"] != "marriott" or db.was_sent(key):
+            continue
+        if results:
+            time.sleep(random.uniform(3, 6))
+        try:
+            qs = ustatz.fetch(h)
+        except Exception as e:  # noqa: BLE001
+            print(f"  [ustatz] {h['name']} 失敗：{e!s:.120}")
+            results[h["id"]] = [Quote(h["id"], now.date(), None, None, "error", f"ustatz 讀取失敗：{e!s:.80}")]
+            continue
+        for q in qs:
+            db.save_quote(q, fetch_day)
+        print(f"  [ustatz] {h['name']} {len(qs)} 天")
+        db.mark_sent(key)
+        results[h["id"]] = qs
+    return results
 
 
 async def collect(cfg, db, hotels, mode, fetch_day, targets=None):
@@ -372,8 +372,9 @@ def run_cmd(a, cfg, db, hotels, by_id):
             db.mark_sent("line-hello")
     if a.cmd in ("daily", "watch"):
         run_hotels = alerts.not_blocked(db, hotels)
-        results = asyncio.run(collect(cfg, db, run_hotels, a.cmd, a.fetch_day,
-                                      schedule_targets(cfg, db, run_hotels, a.cmd)))
+        results = update_marriott(cfg, db, run_hotels, a.fetch_day)
+        browser_hotels = [h for h in run_hotels if h["chain"] != "marriott" or cfg.get("marriott_api")]
+        results.update(asyncio.run(collect(cfg, db, browser_hotels, a.cmd, a.fetch_day)))
         alerts.update_blocks(db, hotels, results)
         msgs += alerts.check_monitors(db, cfg, by_id)
         for h in hotels:
