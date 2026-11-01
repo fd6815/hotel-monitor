@@ -76,10 +76,16 @@ def check_monitors(db, cfg, hotels_by_id) -> list[str]:
         cur = snaps[0]
         if cur["status"] == "ok" and cur["price"] is not None and cur["price"] < m["max_price"]:
             url = build_url(h, date.fromisoformat(d), cfg.get("adults", 2)) if h["chain"] != "demo" else ""
+            # 萬豪資料來自第三方、可能過期：監控不結束，價格變了才再通知
+            third_party = h["chain"] == "marriott" and not cfg.get("marriott_api")
+            key = f"{monitor_key(m)}:{cur['price']}" if third_party else monitor_key(m)
+            if db.was_sent(key):
+                continue
+            note = "\n資料來自 ustatz，可能不是最新，請到官網確認" if third_party else ""
             msgs.append(
-                f"【監控達標】{h['name']} {d}\n目前 {fmt(cur['price'], cur['unit'])}（門檻 < {m['max_price']:,}）\n{url}".strip()
+                f"【監控達標】{h['name']} {d}\n目前 {fmt(cur['price'], cur['unit'])}（門檻 < {m['max_price']:,}）{note}\n{url}".strip()
             )
-            db.mark_sent(monitor_key(m))
+            db.mark_sent(key)
     return msgs
 
 

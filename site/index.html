@@ -491,7 +491,7 @@ function renderCal(){
   const best = ok.filter(([,x])=>metric(x)===min).map(([d])=>d);
   const vr = h && h.value_range;
   $("#sum").innerHTML = `<div><div class="name">${esc(wh.name||h?.name||curHotel)}</div>
-      <div class="meta">${CHAIN[wh.chain]||h?.chain||""} ${esc(wh.code||h?.code||"")}${h&&h.last?" · 抓取 "+esc(h.last):" · 等待第一次抓價"}</div>
+      <div class="meta">${CHAIN[wh.chain]||h?.chain||""} ${esc(wh.code||h?.code||"")}${h&&h.last?(isMarriott(curHotel)?" · 讀取 ":" · 抓取 ")+esc(h.last):" · 等待第一次抓價"}</div>
       ${vr?`<div class="meta">每萬點價值 NT$ ${vr[0].toLocaleString()}–${vr[1].toLocaleString()}</div>`:""}</div>
     <div class="best">${min!=null?`<div class="meta">已查日期最低${PMODE==="cash"?"現金":""}</div><b>${PMODE==="cash"?twd(min):fmt(min,unit)}</b><div class="meta">${best.slice(0,3).map(d=>d.slice(5)).join("、")}${best.length>3?" 等":""}</div>`:""}</div>`;
   const minM = todayStr.slice(0,7), maxM = addMonths(minM, MAX_MONTHS);
@@ -554,7 +554,7 @@ function renderStatus(){
       : `<span class="dot"></span>更新中：${esc(what)}（已送出 ${mins} 分鐘${p.type==="daily"?"":"，萬豪一個月約需 8 分鐘"}）`;
   } else if (isMarriott(curHotel)) {
     const h = dataHotel(curHotel);
-    el.className = "status"; el.textContent = `萬豪資料來自 ustatz（PY的旅行大小事），每天更新一次${h&&h.last?"，上次 "+h.last.slice(5):""}。訂房前請到官網確認`;
+    el.className = "status"; el.textContent = `萬豪資料來自 ustatz（PY的旅行大小事），每天讀取一次${h&&h.last?"，上次讀取 "+h.last.slice(5):""}（不是對方的資料時間）。訂房前請到官網確認`;
   } else if (curHotel && !isLive(curHotel) && monthNeedsFetch(curHotel, curMonth)) {
     el.className = "status";
     el.innerHTML = token() ? "這個月還沒查過" : `這個月還沒查過，<a href="#" id="needTok">設定 token</a> 後切換月份會自動查詢`;
@@ -793,8 +793,8 @@ function openDay(k){
     <div style="margin-top:4px;font-size:13.5px">${change}</div>
     ${x ? `<dl class="kv">
       <dt>點數</dt><dd>${x.s==="ok"||x.s==="premium" ? fmt(x.p,x.u) : "搶空"}</dd>
-      <dt>現金（未稅）</dt><dd>${x.cn!=null ? `${esc(x.cu||"")} ${x.cn.toLocaleString()}　≈ ${twd(x.c)}` : "—"}</dd>
-      <dt>每萬點價值</dt><dd>${x.v ? "NT$ "+x.v.toLocaleString()+(x.g?'<span class="good">划算</span>':"") : "—"}</dd>
+      <dt>現金（${isMarriott(curHotel)?"含稅":"未稅"}）</dt><dd>${x.cn!=null ? `${esc(x.cu||"")} ${x.cn.toLocaleString()}　≈ ${twd(x.c)}` : "—"}</dd>
+      <dt>每萬點價值${isMarriott(curHotel)?"（含稅計）":""}</dt><dd>${x.v ? "NT$ "+x.v.toLocaleString()+(x.g?'<span class="good">划算</span>':"") : "—"}</dd>
     </dl>` : ""}
     ${x ? spark(x.h) : ""}
     <div class="hist">${hist}</div>

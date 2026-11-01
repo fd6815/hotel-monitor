@@ -30,7 +30,8 @@ BASE = Path(__file__).resolve().parent
 os.chdir(BASE)   # 排程執行時工作目錄不一定在這裡
 if sys.stdout is None or sys.stderr is None:   # pythonw 沒有主控台，輸出寫到 log
     (BASE / "data").mkdir(exist_ok=True)
-    _log = open(BASE / "data" / "poll.log", "a", encoding="utf-8", buffering=1)
+    _name = next((c for c in sys.argv[1:] if c in ("daily", "watch")), "poll")
+    _log = open(BASE / "data" / f"{_name}.log", "a", encoding="utf-8", buffering=1)
     sys.stdout = sys.stderr = _log
 
 for _s in (sys.stdout, sys.stderr):
@@ -245,12 +246,13 @@ def ensure_poll_task():
     if os.name != "nt":
         return
     name = "HotelMon Poll"
-    if subprocess.run(["schtasks", "/Query", "/TN", name], capture_output=True).returncode == 0:
+    if subprocess.run(["schtasks", "/Query", "/TN", name], capture_output=True,
+                      creationflags=subprocess.CREATE_NO_WINDOW).returncode == 0:
         return
     pyw = BASE / ".venv" / "Scripts" / "pythonw.exe"
     tr = f'"{pyw}" "{BASE / "run.py"}" poll'
     r = subprocess.run(["schtasks", "/Create", "/F", "/TN", name, "/SC", "MINUTE", "/MO", "1", "/TR", tr],
-                       capture_output=True, text=True)
+                       capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
     print("建立手機請求排程：", "成功" if r.returncode == 0 else r.stderr.strip())
 
 
@@ -359,7 +361,7 @@ def poll(a, cfg, db, hotels, by_id, pending):
         for m in msgs:
             notify.send(cfg, m)
         out = report.write(db, cfg, hotels)
-        publish.publish(cfg, out)
+        publish.publish_data(cfg, out)
     finally:
         lock.unlink(missing_ok=True)
 
@@ -381,6 +383,10 @@ def run_cmd(a, cfg, db, hotels, by_id):
             msgs += alerts.check_errors(db, h, results.get(h["id"], []), a.fetch_day)
             if a.cmd == "daily":
                 msgs += alerts.check_drops(db, cfg, h, a.fetch_day)
+    if a.cmd in ("daily", "watch"):
+        warning = publish.token_warning(cfg, db)
+        if warning:
+            msgs.append(warning)
     if a.cmd in ("daily", "watch", "deals"):
         msgs += deals.check_deals(db, cfg)
     for m in msgs:
@@ -389,7 +395,7 @@ def run_cmd(a, cfg, db, hotels, by_id):
         out = report.write(db, cfg, hotels)
         print("日曆頁：", out)
         if not a.no_publish:
-            publish.publish(cfg, out)
+            (publish.publish if a.cmd == "report" else publish.publish_data)(cfg, out)
 
 
 async def login(cfg):

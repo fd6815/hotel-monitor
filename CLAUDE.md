@@ -14,9 +14,10 @@ GitHub：`fd6815/hotel-monitor`（公開）。手機網頁：https://fd6815.gith
 每 30 分鐘隨 Watch 讀 RSS（config.yaml 的 `deals.feeds`）。網頁只留特價與優惠技巧；LINE 只傳 IHG／Avios／Alaska 點數特賣、bug 價、快速會籍匹配。翻譯用 Google 翻譯免費端點（非官方，失敗顯示原文）。
 
 ## 萬豪目前做法
-資料來源是第三方 ustatz.com（`hotelmon/ustatz.py`，一般 requests 可讀）：每間飯店每天 07:00 後讀一次，一次約 11 個月的點數與現金（含稅，IHG 是未稅），對方是預先抓好的，不一定最新。失敗照封鎖間隔重試。手機請求和切換月份都不觸發萬豪。官網月曆 API 和逐日開頁的程式還留著（config `marriott_api: true` 才用）。
+資料來源是第三方 ustatz.com（`hotelmon/ustatz.py`，一般 requests 可讀）：每間飯店每天 07:00 後讀一次，一次約 11 個月的點數與現金（含稅，IHG 是未稅），對方是預先抓好的，不一定最新。失敗照封鎖間隔重試。手機請求和切換月份都不觸發萬豪。萬豪到價通知不結束監控，價格變了才再通知（鍵 `mon:...:<價格>`）。官網月曆 API 和逐日開頁的程式還留著（config `marriott_api: true` 才用）。
 
-## 排程（需開機且登入，`data\run.lock` 防重複，90 分鐘逾時）
+## 排程（pythonw 背景執行，需開機且登入，`data\run.lock` 防重複，90 分鐘逾時）
+`data.json` 沒實質變動就不上傳（`publish_data`，每天至少一次）。GitHub token 7 天內到期或失效會傳 LINE。
 | 名稱 | 時間 | 內容 | log |
 |---|---|---|---|
 | HotelMon Daily AM/PM | 07:13、19:13 | 週日第一次跑完整 60 天（`--full` 強制），其他時間等同 Watch | `data\daily.log` |

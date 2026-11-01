@@ -106,7 +106,8 @@ run.collect = fake_collect
 alerts.check_drops = lambda *a, **k: calls.__setitem__("drops", calls["drops"] + 1) or []
 alerts.check_errors = lambda *a, **k: []
 run.report.write = lambda *a, **k: tmp / "data.json"
-run.publish.publish = lambda *a, **k: calls.__setitem__("published", calls["published"] + 1)
+real_publish_data = run.publish.publish_data
+run.publish.publish_data = lambda *a, **k: calls.__setitem__("published", calls["published"] + 1)
 run.notify.send = lambda *a, **k: None
 db = DB(cfg["db_path"])
 
@@ -227,6 +228,55 @@ assert run.update_marriott({"marriott_api": True}, db5, hotels, args.fetch_day, 
 ustatz.fetch = real_ustatz_fetch
 assert run.request_targets({"type": "daily"}, c5, hotels, by_id, date.today()).keys() == {"a"}
 assert not run.request_targets({"type": "month", "hotel": "b", "month": "2027-01"}, c5, hotels, by_id, date.today())
+
+# 萬豪到價：不結束監控，價格變了才再通知；IHG 通知一次就完成
+db6 = DB(str(tmp / "n.db"))
+md = (date.today() + timedelta(days=5)).isoformat()
+c6 = {"monitors": [{"hotel": "b", "date": md, "max_price": 60000}, {"hotel": "a", "date": md, "max_price": 60000}]}
+def price(h, p, day):
+    db6.save_quote(run.Quote(h, date.fromisoformat(md), p, "pts", "ok"), day)
+price("b", 59000, "2026-01-01"); price("a", 59000, "2026-01-01")
+m6 = alerts.check_monitors(db6, c6, by_id)
+assert len(m6) == 2 and "ustatz" in m6[0] and "ustatz" not in m6[1], m6
+assert alerts.check_monitors(db6, c6, by_id) == []
+price("b", 58000, "2026-01-02"); price("a", 58000, "2026-01-02")
+m6 = alerts.check_monitors(db6, c6, by_id)
+assert len(m6) == 1 and "58,000" in m6[0], m6
+assert not db6.was_sent(alerts.monitor_key(c6["monitors"][0])) and db6.was_sent(alerts.monitor_key(c6["monitors"][1]))
+
+# data.json 沒變不上傳；只有時間變也不上傳
+import json
+pubs = []
+saved_pub, run.publish.publish = run.publish.publish, lambda c, p, *a, **k: pubs.append(p) or True
+c7 = {"data_dir": str(tmp / "pub")}
+(tmp / "pub").mkdir()
+dj = tmp / "pub" / "data.json"
+dj.write_text(json.dumps({"updated": "1", "hotels": [{"id": "a", "last": "1", "days": {}}]}))
+assert real_publish_data(c7, dj) and len(pubs) == 1
+dj.write_text(json.dumps({"updated": "2", "hotels": [{"id": "a", "last": "2", "days": {}}]}))
+assert not real_publish_data(c7, dj) and len(pubs) == 1
+dj.write_text(json.dumps({"updated": "2", "hotels": [{"id": "a", "last": "2", "days": {"x": 1}}]}))
+assert real_publish_data(c7, dj) and len(pubs) == 2
+run.publish.publish = saved_pub
+
+# token 到期提醒：7 天內才提醒、每天一次；失效也提醒
+db7 = DB(str(tmp / "tok.db"))
+c8 = {"github": {"repo": "x/y", "token": "t"}}
+def fake_gh(status, days):
+    exp = (date.today() + timedelta(days=days)).strftime("%Y-%m-%d 14:44:50 UTC")
+    return lambda *a, **k: types.SimpleNamespace(status_code=status, headers={"github-authentication-token-expiration": exp})
+saved_get = run.publish.requests.get
+run.publish.requests.get = fake_gh(200, 30)
+assert run.publish.token_warning(c8, db7) is None
+run.publish.requests.get = fake_gh(200, 5)
+assert run.publish.token_warning(c8, db7) is None   # 今天查過了
+db7.clear_sent(f"token-check:{date.today()}")
+assert "還有 5 天" in run.publish.token_warning(c8, db7)
+assert run.publish.token_warning(c8, db7) is None
+db7.clear_sent(f"token-check:{date.today()}")
+run.publish.requests.get = fake_gh(401, 5)
+assert "已失效" in run.publish.token_warning(c8, db7)
+run.publish.requests.get = saved_get
 
 # 排程：週日第一次才完整
 sun = date(2026, 11, 8)
