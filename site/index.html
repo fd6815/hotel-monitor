@@ -3,242 +3,575 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>房價日曆</title>
+<meta name="theme-color" content="#0f6e6e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>房價監控</title>
 <style>
 :root{
   --bg:#f6f5f2; --card:#ffffff; --ink:#1d2327; --muted:#6b7378; --line:#e6e3dd;
-  --accent:#0f6e6e; --low:#d7efec; --lowest:#0f6e6e; --lowest-ink:#ffffff;
-  --up:#c46a12; --down:#1f8a4c; --sold:#b8860b; --weekend:#2a6fb0; --chip:#ecebe6;
+  --accent:#0f6e6e; --accent-ink:#ffffff; --low:#d7efec; --lowest:#0f6e6e;
+  --up:#c46a12; --down:#1f8a4c; --sold:#b8860b; --weekend:#2a6fb0; --chip:#ecebe6; --danger:#c0392b;
 }
 @media (prefers-color-scheme: dark){
   :root{
     --bg:#121517; --card:#1b1f22; --ink:#e8ebec; --muted:#9aa3a8; --line:#2a3034;
-    --accent:#4fb3ad; --low:#1d3a38; --lowest:#2c8f89; --lowest-ink:#ffffff;
-    --up:#e3954a; --down:#58c486; --sold:#d9b24c; --weekend:#79b2e8; --chip:#252a2e;
+    --accent:#4fb3ad; --accent-ink:#0b1416; --low:#1d3a38; --lowest:#2c8f89;
+    --up:#e3954a; --down:#58c486; --sold:#d9b24c; --weekend:#79b2e8; --chip:#252a2e; --danger:#ef6b5b;
   }
 }
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);
   font:15px/1.45 -apple-system,BlinkMacSystemFont,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif;
-  -webkit-font-smoothing:antialiased;padding-bottom:env(safe-area-inset-bottom)}
-.wrap{max-width:720px;margin:0 auto;padding:0 16px 40px}
-header{position:sticky;top:0;z-index:5;background:var(--bg);padding:14px 16px 0;margin:0 -16px}
-.top{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
-h1{font-size:20px;margin:0;letter-spacing:.02em}
+  -webkit-font-smoothing:antialiased;padding-bottom:calc(64px + env(safe-area-inset-bottom))}
+button,input,select{font:inherit;color:inherit}
+.wrap{max-width:720px;margin:0 auto;padding:0 16px 24px}
+header{position:sticky;top:0;z-index:5;background:var(--bg);padding:12px 16px 8px;margin:0 -16px;display:flex;align-items:center;gap:8px}
+header h1{font-size:19px;margin:0;flex:1;letter-spacing:.02em}
 .upd{color:var(--muted);font-size:12px}
-.tabs{display:flex;gap:4px;margin-top:12px;border-bottom:1px solid var(--line)}
-.tab{flex:1;background:none;border:0;padding:10px 0;font:inherit;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent}
-.tab.on{color:var(--ink);font-weight:600;border-color:var(--accent)}
-.chips{display:flex;gap:8px;overflow-x:auto;padding:12px 0 4px;scrollbar-width:none}
-.chips::-webkit-scrollbar{display:none}
-.chip{flex:none;border:0;background:var(--chip);color:var(--ink);padding:7px 14px;border-radius:999px;font:inherit;font-size:14px;cursor:pointer}
-.chip.on{background:var(--accent);color:#fff}
+.iconbtn{border:0;background:none;padding:6px;cursor:pointer;color:var(--muted);display:flex}
+.iconbtn svg{width:22px;height:22px}
+nav.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:8;background:var(--card);border-top:1px solid var(--line);
+  display:flex;padding-bottom:env(safe-area-inset-bottom)}
+nav.tabbar button{flex:1;border:0;background:none;padding:8px 0 7px;display:flex;flex-direction:column;align-items:center;gap:2px;
+  color:var(--muted);font-size:12px;cursor:pointer}
+nav.tabbar button svg{width:22px;height:22px}
+nav.tabbar button.on{color:var(--accent)}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-top:12px}
+.sec-title{font-size:15px;font-weight:600;margin:20px 0 4px;display:flex;justify-content:space-between;align-items:baseline}
+.sec-title small{font-weight:400;color:var(--muted);font-size:12px}
+.search{display:flex;gap:8px;margin-top:4px}
+.search input{flex:1;min-width:0;border:1px solid var(--line);background:var(--card);border-radius:12px;padding:11px 12px;outline:none}
+.search input:focus{border-color:var(--accent)}
+.hint{color:var(--muted);font-size:12.5px;margin-top:6px}
+.row{display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--line)}
+.row:last-child{border-bottom:0}
+.row .main{flex:1;min-width:0}
+.row .t{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .s{color:var(--muted);font-size:12.5px}
+.badge{display:inline-block;font-size:11px;padding:1px 6px;border-radius:6px;background:var(--chip);color:var(--muted);margin-right:4px;vertical-align:1px}
+.btn{border:1px solid var(--line);background:var(--card);border-radius:10px;padding:7px 12px;cursor:pointer;white-space:nowrap}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.ghost{border-color:transparent;background:none;color:var(--muted)}
+.btn.danger{color:var(--danger)}
+.btn:disabled{opacity:.5;cursor:default}
+.empty-note{color:var(--muted);text-align:center;padding:22px 0;font-size:14px}
+.chips{display:flex;gap:8px;overflow-x:auto;padding:4px 0;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;border:0;background:var(--chip);color:var(--ink);padding:7px 14px;border-radius:999px;font-size:14px;cursor:pointer}
+.chip.on{background:var(--accent);color:var(--accent-ink)}
 .sum{display:grid;grid-template-columns:1fr auto;gap:4px 12px;align-items:end}
 .sum .name{font-size:18px;font-weight:600}
-.sum .meta{color:var(--muted);font-size:13px}
+.sum .meta{color:var(--muted);font-size:12.5px}
 .sum .best{text-align:right}
 .sum .best b{font-size:20px;color:var(--accent);font-variant-numeric:tabular-nums}
 .legend{display:flex;flex-wrap:wrap;gap:10px;color:var(--muted);font-size:12px;margin-top:10px}
 .legend i{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-2px;margin-right:4px}
-.month h2{font-size:16px;margin:22px 0 8px;text-align:center;font-weight:600}
+.month h2{font-size:16px;margin:20px 0 8px;text-align:center;font-weight:600}
 .grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
 .dow{text-align:center;font-size:12px;color:var(--muted);padding:4px 0}
 .dow.we{color:var(--weekend)}
-.cell{min-height:64px;border-radius:8px;padding:5px 1px 4px;text-align:center;cursor:pointer;
-  display:flex;flex-direction:column;align-items:center;gap:1px;border:1px solid transparent;background:none;font:inherit;color:inherit}
-.cell.empty{cursor:default}
+.cell{min-height:62px;border-radius:8px;padding:5px 1px 4px;text-align:center;cursor:pointer;
+  display:flex;flex-direction:column;align-items:center;gap:1px;border:1px solid transparent;background:none}
+.cell.blank{cursor:default}
 .cell .d{font-size:15px}
 .cell.we .d{color:var(--weekend)}
 .cell .p{font-size:12px;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
 .cell .c{font-size:11px;font-variant-numeric:tabular-nums}
+.cell.past{opacity:.35;cursor:default}
 .cell.low{background:var(--low)}
-.cell.lowest{background:var(--lowest);color:var(--lowest-ink)}
-.cell.lowest .d,.cell.lowest .c,.cell.lowest .c span{color:var(--lowest-ink)!important}
-.cell.mon{border-color:var(--accent)}
+.cell.lowest{background:var(--lowest);color:#fff}
+.cell.lowest .d,.cell.lowest .c,.cell.lowest .c span{color:#fff!important}
+.cell.mon{border-color:var(--accent);border-width:2px}
 .cell.sel{outline:2px solid var(--ink);outline-offset:-2px}
-.up{color:var(--up)} .down{color:var(--down)} .sold{color:var(--sold)}
-.na{color:var(--muted)}
-/* 明細 */
-.sheet{position:fixed;left:0;right:0;bottom:0;z-index:10;background:var(--card);border-top:1px solid var(--line);
-  border-radius:16px 16px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom));transform:translateY(105%);transition:transform .2s ease;
-  max-width:720px;margin:0 auto;box-shadow:0 -6px 24px rgba(0,0,0,.12)}
+.up{color:var(--up)} .down{color:var(--down)} .sold{color:var(--sold)} .muted{color:var(--muted)}
+/* bottom sheet */
+.scrim{position:fixed;inset:0;background:rgba(0,0,0,.28);z-index:20;opacity:0;pointer-events:none;transition:opacity .18s}
+.scrim.open{opacity:1;pointer-events:auto}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:21;background:var(--card);border-radius:16px 16px 0 0;
+  padding:16px 16px calc(16px + env(safe-area-inset-bottom));transform:translateY(105%);transition:transform .2s ease;
+  max-width:720px;margin:0 auto;max-height:88vh;overflow:auto}
 .sheet.open{transform:none}
-.sheet .row{display:flex;justify-content:space-between;align-items:baseline}
+.sheet h3{margin:0 0 2px;font-size:17px}
 .sheet .big{font-size:24px;font-weight:600;font-variant-numeric:tabular-nums}
-.sheet svg{width:100%;height:80px;margin:10px 0 4px;display:block}
-.sheet .hist{color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
-.btns{display:flex;gap:8px;margin-top:12px}
-.btn{flex:1;text-align:center;padding:10px;border-radius:10px;border:1px solid var(--line);background:none;color:var(--ink);font:inherit;text-decoration:none;cursor:pointer}
-.btn.pri{background:var(--accent);border-color:var(--accent);color:#fff}
-/* 監控、優惠 */
-.mon-item{display:grid;grid-template-columns:1fr auto;gap:2px 10px;padding:12px 0;border-bottom:1px solid var(--line)}
-.mon-item:last-child{border-bottom:0}
-.mon-item .t{font-weight:600}
-.mon-item .s{color:var(--muted);font-size:13px}
-.tag{font-size:13px;align-self:center;text-align:right}
-.tag.watch{color:var(--down)} .tag.done{color:#c0392b} .tag.expired{color:var(--muted)}
+.sheet svg.spark{width:100%;height:70px;margin:10px 0 4px;display:block}
+.hist{color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
+.btns{display:flex;gap:8px;margin-top:14px}
+.btns .btn{flex:1;text-align:center;padding:10px;text-decoration:none}
+.field{display:flex;align-items:center;gap:8px;margin-top:12px}
+.field label{color:var(--muted);font-size:13px;white-space:nowrap}
+.field input{flex:1;min-width:0;border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:9px 10px;font-variant-numeric:tabular-nums}
+.tag{font-size:13px;white-space:nowrap}
+.tag.watch{color:var(--down)} .tag.done{color:var(--danger)} .tag.expired{color:var(--muted)} .tag.pending{color:var(--muted)}
+.toggle{position:relative;width:42px;height:24px;flex:none}
+.toggle input{opacity:0;width:0;height:0}
+.toggle span{position:absolute;inset:0;background:var(--chip);border-radius:999px;transition:.15s;cursor:pointer}
+.toggle span::after{content:"";position:absolute;left:3px;top:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:.15s;box-shadow:0 1px 2px rgba(0,0,0,.2)}
+.toggle input:checked+span{background:var(--accent)}
+.toggle input:checked+span::after{left:21px}
 .deal{display:block;padding:12px 0;border-bottom:1px solid var(--line);color:var(--ink);text-decoration:none}
 .deal:last-child{border-bottom:0}
 .deal small{display:block;color:var(--muted);margin-top:2px}
-.empty-note{color:var(--muted);text-align:center;padding:24px 0}
-.hide{display:none}
+.toast{position:fixed;left:50%;bottom:calc(76px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:30;
+  background:var(--ink);color:var(--bg);padding:9px 14px;border-radius:10px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw}
+.toast.show{opacity:.95}
+.banner{background:var(--low);border-radius:12px;padding:10px 12px;font-size:13.5px;margin-top:10px}
+.banner a{color:var(--accent)}
+.hide{display:none!important}
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
-    <div class="top"><h1>房價日曆</h1><span class="upd" id="upd"></span></div>
-    <nav class="tabs">
-      <button class="tab on" data-v="cal">每日房價</button>
-      <button class="tab" data-v="mon">我的監控</button>
-      <button class="tab" data-v="deal">優惠情報</button>
-    </nav>
+    <h1 id="title">房價監控</h1>
+    <span class="upd" id="upd"></span>
+    <button class="iconbtn" id="btnSettings" aria-label="設定">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+    </button>
   </header>
 
-  <section id="v-cal">
+  <!-- 搜尋／收藏 -->
+  <section id="v-home">
+    <div class="search">
+      <input id="q" type="search" placeholder="城市、品牌或飯店名（例：名古屋萬豪）" autocomplete="off" enterkeyhint="search">
+    </div>
+    <div class="hint" id="qhint">萬豪可直接搜尋；IHG 請輸入 5 碼代碼或貼上 ihg.com 飯店網址</div>
+    <div class="card hide" id="results"></div>
+    <div class="sec-title">我的收藏 <small id="favcount"></small></div>
+    <div class="card" id="favs"></div>
+  </section>
+
+  <!-- 日曆 -->
+  <section id="v-cal" class="hide">
     <div class="chips" id="chips"></div>
     <div class="card sum" id="sum"></div>
     <div class="legend">
       <span><i style="background:var(--lowest)"></i>最低</span>
       <span><i style="background:var(--low)"></i>偏低</span>
       <span class="up">漲</span><span class="down">降、新開</span><span class="sold">搶空</span>
-      <span>框線＝監控中</span><span>與前次抓取比較</span>
+      <span>粗框＝監控中</span><span>點日期可加監控</span>
     </div>
     <div id="cal"></div>
   </section>
 
-  <section id="v-mon" class="hide"><div class="card" id="mon"></div></section>
-  <section id="v-deal" class="hide"><div class="card" id="deal"></div></section>
+  <!-- 監控 -->
+  <section id="v-mon" class="hide">
+    <div class="hint">在「日曆」點日期即可新增監控；價格低於門檻時傳 LINE 通知一次，並標為已完成。</div>
+    <div class="card" id="mon"></div>
+  </section>
+
+  <!-- 優惠 -->
+  <section id="v-deal" class="hide">
+    <div class="card" id="deal"></div>
+  </section>
 </div>
 
-<div class="sheet" id="sheet" role="dialog" aria-modal="false"></div>
+<nav class="tabbar">
+  <button data-v="home" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>搜尋收藏</button>
+  <button data-v="cal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>每日房價</button>
+  <button data-v="mon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg>我的監控</button>
+  <button data-v="deal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>優惠情報</button>
+</nav>
+
+<div class="scrim" id="scrim"></div>
+<div class="sheet" id="sheet" role="dialog"></div>
+<div class="toast" id="toast"></div>
 
 <script>
-const DATA = {"updated": "2026-11-01 22:44", "hotels": [{"id": "nagoya-marriott", "name": "名古屋萬豪", "chain": "萬豪", "city": "名古屋", "mode": "points", "last": "2026-11-01 21:49", "days": {"2026-11-01": {"p": 52000, "s": "ok", "u": "pts", "delta": null, "new": false, "url": "https://www.marriott.com/search/availabilityCalendar.mi?propertyCode=NGODT&fromDate=11%2F01%2F2026&toDate=11%2F02%2F2026&flexibleDateSearch=false&lengthOfStay=1&childrenCount=0&clusterCode=none&useRewardsPoints=true&isAdvanceSearch=true&isNGSF=false&numberOfRooms=1&numberOfAdults=2", "h": [["2026-11-01", 52000, "ok"]]}, "2026-11-02": {"p": 50000, "s": "ok", "u": "pts", "delta": null, "new": false, "url": "https://www.marriott.com/search/availabilityCalendar.mi?propertyCode=NGODT&fromDate=11%2F02%2F2026&toDate=11%2F03%2F2026&flexibleDateSearch=false&lengthOfStay=1&childrenCount=0&clusterCode=none&useRewardsPoints=true&isAdvanceSearch=true&isNGSF=false&numberOfRooms=1&numberOfAdults=2", "h": [["2026-11-01", 50000, "ok"]]}, "2026-11-03": {"p": 50000, "s": "ok", "u": "pts", "delta": null, "new": false, "url": "https://www.marriott.com/search/availabilityCalendar.mi?propertyCode=NGODT&fromDate=11%2F03%2F2026&toDate=11%2F04%2F2026&flexibleDateSearch=false&lengthOfStay=1&childrenCount=0&clusterCode=none&useRewardsPoints=true&isAdvanceSearch=true&isNGSF=false&numberOfRooms=1&numberOfAdults=2", "h": [["2026-11-01", 50000, "ok"]]}, "2026-11-04": {"p": 98800, "s": "ok", "u": "pts", "delta": null, "new": false, "url": "https://www.marriott.com/search/availabilityCalendar.mi?propertyCode=NGODT&fromDate=11%2F04%2F2026&toDate=11%2F05%2F2026&flexibleDateSearch=false&lengthOfStay=1&childrenCount=0&clusterCode=none&useRewardsPoints=true&isAdvanceSearch=true&isNGSF=false&numberOfRooms=1&numberOfAdults=2", "h": [["2026-11-01", 98800, "ok"]]}, "2026-11-05": {"p": 53000, "s": "ok", "u": "pts", "delta": null, "new": false, "url": "https://www.marriott.com/search/availabilityCalendar.mi?propertyCode=NGODT&fromDate=11%2F05%2F2026&toDate=11%2F06%2F2026&flexibleDateSearch=false&lengthOfStay=1&childrenCount=0&clusterCode=none&useRewardsPoints=true&isAdvanceSearch=true&isNGSF=false&numberOfRooms=1&numberOfAdults=2", "h": [["2026-11-01", 53000, "ok"]]}, "2026-11-06": {"p": 52000, "s": "ok", "u": "pts", "delta": null, "new": false, "url": "https://www.marriott.com/search/availabilityCalendar.mi?propertyCode=NGODT&fromDate=11%2F06%2F2026&toDate=11%2F07%2F2026&flexibleDateSearch=false&lengthOfStay=1&childrenCount=0&clusterCode=none&useRewardsPoints=true&isAdvanceSearch=true&isNGSF=false&numberOfRooms=1&numberOfAdults=2", "h": [["2026-11-01", 52000, "ok"]]}, "2026-11-07": {"p": 59000, "s": "ok", "u": "pts", "delta": null, "new": false, "url": "https://www.marriott.com/search/availabilityCalendar.mi?propertyCode=NGODT&fromDate=11%2F07%2F2026&toDate=11%2F08%2F2026&flexibleDateSearch=false&lengthOfStay=1&childrenCount=0&clusterCode=none&useRewardsPoints=true&isAdvanceSearch=true&isNGSF=false&numberOfRooms=1&numberOfAdults=2", "h": [["2026-11-01", 59000, "ok"]]}, "2026-11-08": {"p": 52000, "s": "ok", "u": "pts", "delta": null, "new": false, "url": "https://www.marriott.com/search/availabilityCalendar.mi?propertyCode=NGODT&fromDate=11%2F08%2F2026&toDate=11%2F09%2F2026&flexibleDateSearch=false&lengthOfStay=1&childrenCount=0&clusterCode=none&useRewardsPoints=true&isAdvanceSearch=true&isNGSF=false&numberOfRooms=1&numberOfAdults=2", "h": [["2026-11-01", 52000, "ok"]]}, "2026-11-09": {"p": 58000, "s": "ok", "u": "pts", "delta": null, "new": false, "url": "https://www.marriott.com/search/availabilityCalendar.mi?propertyCode=NGODT&fromDate=11%2F09%2F2026&toDate=11%2F10%2F2026&flexibleDateSearch=false&lengthOfStay=1&childrenCount=0&clusterCode=none&useRewardsPoints=true&isAdvanceSearch=true&isNGSF=false&numberOfRooms=1&numberOfAdults=2", "h": [["2026-11-01", 58000, "ok"]]}, "2026-11-10": {"p": 230200, "s": "ok", "u": "pts", "delta": null, "new": false, "url": "https://www.marriott.com/search/availabilityCalendar.mi?propertyCode=NGODT&fromDate=11%2F10%2F2026&toDate=11%2F11%2F2026&flexibleDateSearch=false&lengthOfStay=1&childrenCount=0&clusterCode=none&useRewardsPoints=true&isAdvanceSearch=true&isNGSF=false&numberOfRooms=1&numberOfAdults=2", "h": [["2026-11-01", 230200, "ok"]]}, "2026-11-11": {"p": 59000, "s": "ok", "u": "pts", "delta": null, "new": false, "url": "https://www.marriott.com/search/availabilityCalendar.mi?propertyCode=NGODT&fromDate=11%2F11%2F2026&toDate=11%2F12%2F2026&flexibleDateSearch=false&lengthOfStay=1&childrenCount=0&clusterCode=none&useRewardsPoints=true&isAdvanceSearch=true&isNGSF=false&numberOfRooms=1&numberOfAdults=2", "h": [["2026-11-01", 59000, "ok"]]}, "2026-11-12": {"p": 230200, "s": "ok", "u": "pts", "delta": null, "new": false, "url": "https://www.marriott.com/search/availabilityCalendar.mi?propertyCode=NGODT&fromDate=11%2F12%2F2026&toDate=11%2F13%2F2026&flexibleDateSearch=false&lengthOfStay=1&childrenCount=0&clusterCode=none&useRewardsPoints=true&isAdvanceSearch=true&isNGSF=false&numberOfRooms=1&numberOfAdults=2", "h": [["2026-11-01", 230200, "ok"]]}, "2026-11-13": {"p": 62000, "s": "ok", "u": "pts", "delta": null, "new": false, "url": "https://www.marriott.com/search/availabilityCalendar.mi?propertyCode=NGODT&fromDate=11%2F13%2F2026&toDate=11%2F14%2F2026&flexibleDateSearch=false&lengthOfStay=1&childrenCount=0&clusterCode=none&useRewardsPoints=true&isAdvanceSearch=true&isNGSF=false&numberOfRooms=1&numberOfAdults=2", "h": [["2026-11-01", 62000, "ok"]]}, "2026-11-14": {"p": 300600, "s": "ok", "u": "pts", "delta": null, "new": false, "url": "https://www.marriott.com/search/availabilityCalendar.mi?propertyCode=NGODT&fromDate=11%2F14%2F2026&toDate=11%2F15%2F2026&flexibleDateSearch=false&lengthOfStay=1&childrenCount=0&clusterCode=none&useRewardsPoints=true&isAdvanceSearch=true&isNGSF=false&numberOfRooms=1&numberOfAdults=2", "h": [["2026-11-01", 300600, "ok"]]}, "2026-11-15": {"p": 58000, "s": "ok", "u": "pts", "delta": null, "new": false, "url": "https://www.marriott.com/search/availabilityCalendar.mi?propertyCode=NGODT&fromDate=11%2F15%2F2026&toDate=11%2F16%2F2026&flexibleDateSearch=false&lengthOfStay=1&childrenCount=0&clusterCode=none&useRewardsPoints=true&isAdvanceSearch=true&isNGSF=false&numberOfRooms=1&numberOfAdults=2", "h": [["2026-11-01", 58000, "ok"]]}, "2026-11-16": {"p": 61000, "s": "ok", "u": "pts", "delta": null, "new": false, "url": "https://www.marriott.com/search/availabilityCalendar.mi?propertyCode=NGODT&fromDate=11%2F16%2F2026&toDate=11%2F17%2F2026&flexibleDateSearch=false&lengthOfStay=1&childrenCount=0&clusterCode=none&useRewardsPoints=true&isAdvanceSearch=true&isNGSF=false&numberOfRooms=1&numberOfAdults=2", "h": [["2026-11-01", 61000, "ok"]]}, "2026-11-17": {"p": 59000, "s": "ok", "u": "pts", "delta": null, "new": false, "url": "https://www.marriott.com/search/availabilityCalendar.mi?propertyCode=NGODT&fromDate=11%2F17%2F2026&toDate=11%2F18%2F2026&flexibleDateSearch=false&lengthOfStay=1&childrenCount=0&clusterCode=none&useRewardsPoints=true&isAdvanceSearch=true&isNGSF=false&numberOfRooms=1&numberOfAdults=2", "h": [["2026-11-01", 59000, "ok"]]}, "2026-11-18": {"p": 58000, "s": "ok", "u": "pts", "delta": null, "new": false, "url": "https://www.marriott.com/search/availabilityCalendar.mi?propertyCode=NGODT&fromDate=11%2F18%2F2026&toDate=11%2F19%2F2026&flexibleDateSearch=false&lengthOfStay=1&childrenCount=0&clusterCode=none&useRewardsPoints=true&isAdvanceSearch=true&isNGSF=false&numberOfRooms=1&numberOfAdults=2", "h": [["2026-11-01", 58000, "ok"]]}, "2026-11-19": {"p": 56000, "s": "ok", "u": "pts", "delta": null, "new": false, "url": "https://www.marriott.com/search/availabilityCalendar.mi?propertyCode=NGODT&fromDate=11%2F19%2F2026&toDate=11%2F20%2F2026&flexibleDateSearch=false&lengthOfStay=1&childrenCount=0&clusterCode=none&useRewardsPoints=true&isAdvanceSearch=true&isNGSF=false&numberOfRooms=1&numberOfAdults=2", "h": [["2026-11-01", 56000, "ok"]]}, "2026-11-20": {"p": 228200, "s": "ok", "u": "pts", "delta": null, "new": false, "url": "https://www.marriott.com/search/availabilityCalendar.mi?propertyCode=NGODT&fromDate=11%2F20%2F2026&toDate=11%2F21%2F2026&flexibleDateSearch=false&lengthOfStay=1&childrenCount=0&clusterCode=none&useRewardsPoints=true&isAdvanceSearch=true&isNGSF=false&numberOfRooms=1&numberOfAdults=2", "h": [["2026-11-01", 228200, "ok"]]}, "2026-11-21": {"p": 300600, "s": "ok", "u": "pts", "delta": null, "new": false, "url": "https://www.marriott.com/search/availabilityCalendar.mi?propertyCode=NGODT&fromDate=11%2F21%2F2026&toDate=11%2F22%2F2026&flexibleDateSearch=false&lengthOfStay=1&childrenCount=0&clusterCode=none&useRewardsPoints=true&isAdvanceSearch=true&isNGSF=false&numberOfRooms=1&numberOfAdults=2", "h": [["2026-11-01", 300600, "ok"]]}, "2026-11-22": {"p": 60000, "s": "ok", "u": "pts", "delta": null, "new": false, "url": "https://www.marriott.com/search/availabilityCalendar.mi?propertyCode=NGODT&fromDate=11%2F22%2F2026&toDate=11%2F23%2F2026&flexibleDateSearch=false&lengthOfStay=1&childrenCount=0&clusterCode=none&useRewardsPoints=true&isAdvanceSearch=true&isNGSF=false&numberOfRooms=1&numberOfAdults=2", "h": [["2026-11-01", 60000, "ok"]]}, "2026-11-23": {"p": 50000, "s": "ok", "u": "pts", "delta": null, "new": false, "url": "https://www.marriott.com/search/availabilityCalendar.mi?propertyCode=NGODT&fromDate=11%2F23%2F2026&toDate=11%2F24%2F2026&flexibleDateSearch=false&lengthOfStay=1&childrenCount=0&clusterCode=none&useRewardsPoints=true&isAdvanceSearch=true&isNGSF=false&numberOfRooms=1&numberOfAdults=2", "h": [["2026-11-01", 50000, "ok"]]}, "2026-11-24": {"p": 53000, "s": "ok", "u": "pts", "delta": null, "new": false, "url": "https://www.marriott.com/search/availabilityCalendar.mi?propertyCode=NGODT&fromDate=11%2F24%2F2026&toDate=11%2F25%2F2026&flexibleDateSearch=false&lengthOfStay=1&childrenCount=0&clusterCode=none&useRewardsPoints=true&isAdvanceSearch=true&isNGSF=false&numberOfRooms=1&numberOfAdults=2", "h": [["2026-11-01", 53000, "ok"]]}, "2026-11-25": {"p": 57000, "s": "ok", "u": "pts", "delta": null, "new": false, "url": "https://www.marriott.com/search/availabilityCalendar.mi?propertyCode=NGODT&fromDate=11%2F25%2F2026&toDate=11%2F26%2F2026&flexibleDateSearch=false&lengthOfStay=1&childrenCount=0&clusterCode=none&useRewardsPoints=true&isAdvanceSearch=true&isNGSF=false&numberOfRooms=1&numberOfAdults=2", "h": [["2026-11-01", 57000, "ok"]]}, "2026-11-26": {"p": 61000, "s": "ok", "u": "pts", "delta": null, "new": false, "url": "https://www.marriott.com/search/availabilityCalendar.mi?propertyCode=NGODT&fromDate=11%2F26%2F2026&toDate=11%2F27%2F2026&flexibleDateSearch=false&lengthOfStay=1&childrenCount=0&clusterCode=none&useRewardsPoints=true&isAdvanceSearch=true&isNGSF=false&numberOfRooms=1&numberOfAdults=2", "h": [["2026-11-01", 61000, "ok"]]}, "2026-11-27": {"p": 62000, "s": "ok", "u": "pts", "delta": null, "new": false, "url": "https://www.marriott.com/search/availabilityCalendar.mi?propertyCode=NGODT&fromDate=11%2F27%2F2026&toDate=11%2F28%2F2026&flexibleDateSearch=false&lengthOfStay=1&childrenCount=0&clusterCode=none&useRewardsPoints=true&isAdvanceSearch=true&isNGSF=false&numberOfRooms=1&numberOfAdults=2", "h": [["2026-11-01", 62000, "ok"]]}, "2026-11-29": {"p": 52000, "s": "ok", "u": "pts", "delta": null, "new": false, "url": "https://www.marriott.com/search/availabilityCalendar.mi?propertyCode=NGODT&fromDate=11%2F29%2F2026&toDate=11%2F30%2F2026&flexibleDateSearch=false&lengthOfStay=1&childrenCount=0&clusterCode=none&useRewardsPoints=true&isAdvanceSearch=true&isNGSF=false&numberOfRooms=1&numberOfAdults=2", "h": [["2026-11-01", 52000, "ok"]]}, "2026-11-30": {"p": 49000, "s": "ok", "u": "pts", "delta": null, "new": false, "url": "https://www.marriott.com/search/availabilityCalendar.mi?propertyCode=NGODT&fromDate=11%2F30%2F2026&toDate=12%2F01%2F2026&flexibleDateSearch=false&lengthOfStay=1&childrenCount=0&clusterCode=none&useRewardsPoints=true&isAdvanceSearch=true&isNGSF=false&numberOfRooms=1&numberOfAdults=2", "h": [["2026-11-01", 49000, "ok"]]}, "2026-12-01": {"p": 50000, "s": "ok", "u": "pts", "delta": null, "new": false, "url": "https://www.marriott.com/search/availabilityCalendar.mi?propertyCode=NGODT&fromDate=12%2F01%2F2026&toDate=12%2F02%2F2026&flexibleDateSearch=false&lengthOfStay=1&childrenCount=0&clusterCode=none&useRewardsPoints=true&isAdvanceSearch=true&isNGSF=false&numberOfRooms=1&numberOfAdults=2", "h": [["2026-11-01", 50000, "ok"]]}, "2026-12-02": {"p": 56000, "s": "ok", "u": "pts", "delta": null, "new": false, "url": "https://www.marriott.com/search/availabilityCalendar.mi?propertyCode=NGODT&fromDate=12%2F02%2F2026&toDate=12%2F03%2F2026&flexibleDateSearch=false&lengthOfStay=1&childrenCount=0&clusterCode=none&useRewardsPoints=true&isAdvanceSearch=true&isNGSF=false&numberOfRooms=1&numberOfAdults=2", "h": [["2026-11-01", 56000, "ok"]]}, "2026-12-03": {"p": 58000, "s": "ok", "u": "pts", "delta": null, "new": false, "url": "https://www.marriott.com/search/availabilityCalendar.mi?propertyCode=NGODT&fromDate=12%2F03%2F2026&toDate=12%2F04%2F2026&flexibleDateSearch=false&lengthOfStay=1&childrenCount=0&clusterCode=none&useRewardsPoints=true&isAdvanceSearch=true&isNGSF=false&numberOfRooms=1&numberOfAdults=2", "h": [["2026-11-01", 58000, "ok"]]}}}, {"id": "ic-taipei", "name": "台北洲際", "chain": "IHG", "city": "台北", "mode": "points", "last": "2026-11-01 22:44", "days": {"2026-11-01": {"p": null, "s": "sold_out", "u": null, "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=1&qCiMy=102026&qCoD=2&qCoMy=102026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", null, "sold_out"]]}, "2026-11-02": {"p": null, "s": "sold_out", "u": null, "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=2&qCiMy=102026&qCoD=3&qCoMy=102026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", null, "sold_out"]]}, "2026-11-03": {"p": null, "s": "sold_out", "u": null, "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=3&qCiMy=102026&qCoD=4&qCoMy=102026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", null, "sold_out"]]}, "2026-11-04": {"p": 53550, "s": "ok", "u": "pts", "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=4&qCiMy=102026&qCoD=5&qCoMy=102026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", 53550, "ok"]]}, "2026-11-05": {"p": null, "s": "sold_out", "u": null, "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=5&qCiMy=102026&qCoD=6&qCoMy=102026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", null, "sold_out"]]}, "2026-11-06": {"p": null, "s": "sold_out", "u": null, "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=6&qCiMy=102026&qCoD=7&qCoMy=102026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", null, "sold_out"]]}, "2026-11-07": {"p": null, "s": "sold_out", "u": null, "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=7&qCiMy=102026&qCoD=8&qCoMy=102026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", null, "sold_out"]]}, "2026-11-08": {"p": null, "s": "sold_out", "u": null, "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=8&qCiMy=102026&qCoD=9&qCoMy=102026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", null, "sold_out"]]}, "2026-11-09": {"p": 73100, "s": "ok", "u": "pts", "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=9&qCiMy=102026&qCoD=10&qCoMy=102026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", 73100, "ok"]]}, "2026-11-10": {"p": 61200, "s": "ok", "u": "pts", "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=10&qCiMy=102026&qCoD=11&qCoMy=102026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", 61200, "ok"]]}, "2026-11-11": {"p": 62900, "s": "ok", "u": "pts", "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=11&qCiMy=102026&qCoD=12&qCoMy=102026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", 62900, "ok"]]}, "2026-11-12": {"p": 58650, "s": "ok", "u": "pts", "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=12&qCiMy=102026&qCoD=13&qCoMy=102026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", 58650, "ok"]]}, "2026-11-13": {"p": null, "s": "sold_out", "u": null, "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=13&qCiMy=102026&qCoD=14&qCoMy=102026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", null, "sold_out"]]}, "2026-11-14": {"p": null, "s": "sold_out", "u": null, "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=14&qCiMy=102026&qCoD=15&qCoMy=102026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", null, "sold_out"]]}, "2026-11-15": {"p": null, "s": "sold_out", "u": null, "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=15&qCiMy=102026&qCoD=16&qCoMy=102026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", null, "sold_out"]]}, "2026-11-16": {"p": 60350, "s": "ok", "u": "pts", "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=16&qCiMy=102026&qCoD=17&qCoMy=102026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", 60350, "ok"]]}, "2026-11-17": {"p": 60350, "s": "ok", "u": "pts", "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=17&qCiMy=102026&qCoD=18&qCoMy=102026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", 60350, "ok"]]}, "2026-11-18": {"p": null, "s": "sold_out", "u": null, "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=18&qCiMy=102026&qCoD=19&qCoMy=102026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", null, "sold_out"]]}, "2026-11-19": {"p": 63750, "s": "ok", "u": "pts", "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=19&qCiMy=102026&qCoD=20&qCoMy=102026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", 63750, "ok"]]}, "2026-11-20": {"p": null, "s": "sold_out", "u": null, "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=20&qCiMy=102026&qCoD=21&qCoMy=102026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", null, "sold_out"]]}, "2026-11-21": {"p": null, "s": "sold_out", "u": null, "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=21&qCiMy=102026&qCoD=22&qCoMy=102026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", null, "sold_out"]]}, "2026-11-22": {"p": null, "s": "sold_out", "u": null, "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=22&qCiMy=102026&qCoD=23&qCoMy=102026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", null, "sold_out"]]}, "2026-11-23": {"p": null, "s": "sold_out", "u": null, "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=23&qCiMy=102026&qCoD=24&qCoMy=102026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", null, "sold_out"]]}, "2026-11-24": {"p": 60350, "s": "ok", "u": "pts", "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=24&qCiMy=102026&qCoD=25&qCoMy=102026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", 60350, "ok"]]}, "2026-11-25": {"p": null, "s": "sold_out", "u": null, "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=25&qCiMy=102026&qCoD=26&qCoMy=102026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", null, "sold_out"]]}, "2026-11-26": {"p": null, "s": "sold_out", "u": null, "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=26&qCiMy=102026&qCoD=27&qCoMy=102026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", null, "sold_out"]]}, "2026-11-27": {"p": null, "s": "sold_out", "u": null, "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=27&qCiMy=102026&qCoD=28&qCoMy=102026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", null, "sold_out"]]}, "2026-11-28": {"p": null, "s": "sold_out", "u": null, "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=28&qCiMy=102026&qCoD=29&qCoMy=102026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", null, "sold_out"]]}, "2026-11-29": {"p": 62050, "s": "ok", "u": "pts", "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=29&qCiMy=102026&qCoD=30&qCoMy=102026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", 62050, "ok"]]}, "2026-11-30": {"p": 61200, "s": "ok", "u": "pts", "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=30&qCiMy=102026&qCoD=1&qCoMy=112026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", 61200, "ok"]]}, "2026-12-01": {"p": 60350, "s": "ok", "u": "pts", "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=1&qCiMy=112026&qCoD=2&qCoMy=112026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", 60350, "ok"]]}, "2026-12-02": {"p": 59500, "s": "ok", "u": "pts", "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=2&qCiMy=112026&qCoD=3&qCoMy=112026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", 59500, "ok"]]}, "2026-12-03": {"p": 60350, "s": "ok", "u": "pts", "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=3&qCiMy=112026&qCoD=4&qCoMy=112026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", 60350, "ok"]]}, "2026-12-04": {"p": null, "s": "sold_out", "u": null, "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=4&qCiMy=112026&qCoD=5&qCoMy=112026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", null, "sold_out"]]}, "2026-12-05": {"p": null, "s": "sold_out", "u": null, "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=5&qCiMy=112026&qCoD=6&qCoMy=112026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", null, "sold_out"]]}, "2026-12-06": {"p": null, "s": "sold_out", "u": null, "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=6&qCiMy=112026&qCoD=7&qCoMy=112026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", null, "sold_out"]]}, "2026-12-07": {"p": null, "s": "sold_out", "u": null, "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=7&qCiMy=112026&qCoD=8&qCoMy=112026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", null, "sold_out"]]}, "2026-12-08": {"p": null, "s": "sold_out", "u": null, "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=8&qCiMy=112026&qCoD=9&qCoMy=112026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", null, "sold_out"]]}, "2026-12-09": {"p": null, "s": "sold_out", "u": null, "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=9&qCiMy=112026&qCoD=10&qCoMy=112026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", null, "sold_out"]]}, "2026-12-10": {"p": null, "s": "sold_out", "u": null, "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=10&qCiMy=112026&qCoD=11&qCoMy=112026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", null, "sold_out"]]}, "2026-12-11": {"p": null, "s": "sold_out", "u": null, "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=11&qCiMy=112026&qCoD=12&qCoMy=112026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", null, "sold_out"]]}, "2026-12-12": {"p": null, "s": "sold_out", "u": null, "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=12&qCiMy=112026&qCoD=13&qCoMy=112026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", null, "sold_out"]]}, "2026-12-13": {"p": null, "s": "sold_out", "u": null, "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=13&qCiMy=112026&qCoD=14&qCoMy=112026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", null, "sold_out"]]}, "2026-12-14": {"p": null, "s": "sold_out", "u": null, "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=14&qCiMy=112026&qCoD=15&qCoMy=112026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", null, "sold_out"]]}, "2026-12-15": {"p": null, "s": "sold_out", "u": null, "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=15&qCiMy=112026&qCoD=16&qCoMy=112026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", null, "sold_out"]]}, "2026-12-16": {"p": null, "s": "sold_out", "u": null, "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=16&qCiMy=112026&qCoD=17&qCoMy=112026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", null, "sold_out"]]}, "2026-12-17": {"p": 57800, "s": "ok", "u": "pts", "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=17&qCiMy=112026&qCoD=18&qCoMy=112026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", 57800, "ok"]]}, "2026-12-18": {"p": null, "s": "sold_out", "u": null, "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=18&qCiMy=112026&qCoD=19&qCoMy=112026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", null, "sold_out"]]}, "2026-12-19": {"p": null, "s": "sold_out", "u": null, "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=19&qCiMy=112026&qCoD=20&qCoMy=112026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", null, "sold_out"]]}, "2026-12-20": {"p": 66300, "s": "ok", "u": "pts", "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=20&qCiMy=112026&qCoD=21&qCoMy=112026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", 66300, "ok"]]}, "2026-12-21": {"p": 60350, "s": "ok", "u": "pts", "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=21&qCiMy=112026&qCoD=22&qCoMy=112026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", 60350, "ok"]]}, "2026-12-22": {"p": 62050, "s": "ok", "u": "pts", "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=22&qCiMy=112026&qCoD=23&qCoMy=112026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", 62050, "ok"]]}, "2026-12-23": {"p": 62900, "s": "ok", "u": "pts", "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=23&qCiMy=112026&qCoD=24&qCoMy=112026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", 62900, "ok"]]}, "2026-12-24": {"p": null, "s": "sold_out", "u": null, "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=24&qCiMy=112026&qCoD=25&qCoMy=112026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", null, "sold_out"]]}, "2026-12-25": {"p": null, "s": "sold_out", "u": null, "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=25&qCiMy=112026&qCoD=26&qCoMy=112026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", null, "sold_out"]]}, "2026-12-26": {"p": null, "s": "sold_out", "u": null, "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=26&qCiMy=112026&qCoD=27&qCoMy=112026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", null, "sold_out"]]}, "2026-12-27": {"p": 85850, "s": "ok", "u": "pts", "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=27&qCiMy=112026&qCoD=28&qCoMy=112026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", 85850, "ok"]]}, "2026-12-28": {"p": 83300, "s": "ok", "u": "pts", "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=28&qCiMy=112026&qCoD=29&qCoMy=112026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", 83300, "ok"]]}, "2026-12-29": {"p": 84150, "s": "ok", "u": "pts", "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=29&qCiMy=112026&qCoD=30&qCoMy=112026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", 84150, "ok"]]}, "2026-12-30": {"p": 85850, "s": "ok", "u": "pts", "delta": null, "new": false, "url": "https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail/rooms?qCiD=30&qCiMy=112026&qCoD=31&qCoMy=112026&qAdlt=2&qChld=0&qRms=1&qRtP=IVANI", "h": [["2026-11-01", 85850, "ok"]]}}}], "monitors": [{"date": "2026-11-28", "hotel": "nagoya-marriott", "name": "名古屋萬豪", "max": 60000, "cur": null, "s": null, "unit": null, "state": "watch", "done_at": null}, {"date": "2026-12-06", "hotel": "ic-taipei", "name": "台北洲際", "max": 65000, "cur": null, "s": "sold_out", "unit": null, "state": "watch", "done_at": null}], "deals": [{"title": "Marriott Bonvoy Nightly Upgrade Awards: How To Earn & Redeem Them, Maximize Value", "link": "https://onemileatatime.com/guides/marriott-bonvoy-nightly-upgrade-awards/", "source": "onemileatatime.com", "seen": "2026-11-01 21:55"}, {"title": "Transfer Capital One Miles To Air France-KLM Flying Blue With 20% Bonus: Worth It?", "link": "https://onemileatatime.com/deals/capital-one-flying-blue-transfer-bonus/", "source": "onemileatatime.com", "seen": "2026-11-01 21:55"}, {"title": "IHG 15% Off Awards At Select New & Refreshed Hotels Through April 30, 2027", "link": "https://loyaltylobby.com/2026/11/01/ihg-15-off-awards-at-select-new-refreshed-hotels-through-april-30-2027/?omhide=true", "source": "loyaltylobby.com", "seen": "2026-11-01 21:55"}, {"title": "Transfer Chase Points To IHG With 80% Bonus: Why It’s Not Worth It", "link": "https://onemileatatime.com/deals/chase-ihg-transfer-bonus/", "source": "onemileatatime.com", "seen": "2026-11-01 21:55"}, {"title": "Bilt Rent Day Promotion November 2026: Up To $150 Off Hotel, Up To 100% Gift Card Bonus", "link": "https://onemileatatime.com/guides/bilt-rent-day-promotion/", "source": "onemileatatime.com", "seen": "2026-11-01 21:55"}, {"title": "Compensation Clinic: Hyatt Hotels Dining Pre-Order System Fail During Dinner", "link": "https://loyaltylobby.com/2026/11/01/compensation-clinic-hyatt-hotels-dining-pre-order-system-fail-during-dinner/?omhide=true", "source": "loyaltylobby.com", "seen": "2026-11-01 21:55"}, {"title": "Weekly Review: October 31, 2026", "link": "https://onemileatatime.com/weekly-review/2026-10-31/", "source": "onemileatatime.com", "seen": "2026-11-01 21:55"}, {"title": "Success! IHG Premier Credit Card $100 Airline Credit (Don’t Forget To Use!)", "link": "https://loyaltylobby.com/2026/10/31/success-ihg-premier-credit-card-100-airline-credit-dont-forget-to-use/?omhide=true", "source": "loyaltylobby.com", "seen": "2026-11-01 21:55"}, {"title": "GHA Discovery Double Elite Qualifying Nights November 1 – December 31, 2026", "link": "https://loyaltylobby.com/2026/10/31/gha-discovery-double-elite-qualifying-nights-november-1-december-31-2026/?omhide=true", "source": "loyaltylobby.com", "seen": "2026-11-01 21:55"}, {"title": "ALL Accor Double Points For Stays At Select Brands In Asia-Pacific, Middle East & Africa Through March 31, 2027 (Book By December 13)", "link": "https://loyaltylobby.com/2026/10/31/all-accor-double-points-for-stays-at-select-brands-in-asia-pacific-middle-east-africa-through-march-31-2027-book-by-december-13/?omhide=true", "source": "loyaltylobby.com", "seen": "2026-11-01 21:55"}, {"title": "Which Credit Card Should You Use For Marriott Hotel Stays? Here’s The Math", "link": "https://onemileatatime.com/insights/marriott-hotel-stays-which-credit-card/", "source": "onemileatatime.com", "seen": "2026-11-01 21:55"}, {"title": "Massive Amadeus Hack Affecting Hundreds Of Thousands Of Passengers Across Multiple Airlines", "link": "https://loyaltylobby.com/2026/10/31/massive-amadeus-hack-affecting-hundreds-of-thousands-of-passengers-across-multiple-airlines/?omhide=true", "source": "loyaltylobby.com", "seen": "2026-11-01 21:55"}, {"title": "Rant: Entire Residential Apartment Buildings Being Converted To Air BnB’s & Hotels", "link": "https://loyaltylobby.com/2026/10/31/rant-entire-residential-apartment-buildings-being-converted-to-air-bnbs-hotels/?omhide=true", "source": "loyaltylobby.com", "seen": "2026-11-01 21:55"}, {"title": "ALL Accor Greater China 3X Points + Instant Gold With Fast Track Until December 31, 2026 (Book By November 15)", "link": "https://loyaltylobby.com/2026/10/30/all-accor-greater-china-3x-points-instant-gold-with-fast-track-until-december-31-2026-book-by-november-15/?omhide=true", "source": "loyaltylobby.com", "seen": "2026-11-01 21:55"}, {"title": "Grand Hyatt Barcelona Becomes RIU Plaza Hotel On April 1, 2027", "link": "https://loyaltylobby.com/2026/10/30/grand-hyatt-barcelona-becomes-riu-plaza-hotel-on-april-1-2027/?omhide=true", "source": "loyaltylobby.com", "seen": "2026-11-01 21:55"}, {"title": "A sky-high Vegas bar, a chic new Marriott in South Africa and more hotel news", "link": "https://thepointsguy.com/news/cape-town-edition-thompson-rome/", "source": "thepointsguy.com", "seen": "2026-11-01 21:55"}, {"title": "How to earn and use an IHG annual lounge membership", "link": "https://thepointsguy.com/loyalty-programs/ihg-lounge-access-milestone-reward/", "source": "thepointsguy.com", "seen": "2026-11-01 21:55"}]};
+/* ---------- 設定 ---------- */
+const REPO = "fd6815/hotel-monitor";
+const WL_PATH = "watch/watchlist.json";
+const DAYS_AHEAD = 60;
+const EMBED = null/*__DATA__*/;
+const CHAIN = {marriott:"萬豪", ihg:"IHG", hyatt:"凱悅", accor:"雅高"};
+
+/* 中文搜尋對照：城市（含機場代碼）、品牌 */
+const ALIAS = {
+  "名古屋":["nagoya","NGO"],"東京":["tokyo","TYO"],"东京":["tokyo","TYO"],"大阪":["osaka","OSA"],"京都":["kyoto","UKY"],
+  "札幌":["sapporo","SPK"],"北海道":["hokkaido","niseko","sapporo"],"沖繩":["okinawa","OKA"],"冲绳":["okinawa","OKA"],
+  "福岡":["fukuoka","FUK"],"神戶":["kobe","UKB"],"橫濱":["yokohama","YOK"],"奈良":["nara"],"廣島":["hiroshima","HIJ"],
+  "箱根":["hakone"],"富士":["fuji"],"河口湖":["kawaguchiko","fuji"],"輕井澤":["karuizawa"],"金澤":["kanazawa"],"日光":["nikko"],
+  "台北":["taipei","TPE"],"臺北":["taipei","TPE"],"台中":["taichung","RMQ"],"臺中":["taichung","RMQ"],"高雄":["kaohsiung","KHH"],
+  "台南":["tainan","TNN"],"臺南":["tainan","TNN"],"新北":["new taipei","taipei"],"桃園":["taoyuan"],"宜蘭":["yilan"],"花蓮":["hualien","HUN"],"墾丁":["kenting"],
+  "首爾":["seoul","SEL"],"首尔":["seoul","SEL"],"釜山":["busan","PUS"],"濟州":["jeju","CJU"],
+  "曼谷":["bangkok","BKK"],"普吉":["phuket","HKT"],"清邁":["chiang mai","CNX"],"清迈":["chiang mai","CNX"],"芭達雅":["pattaya"],"蘇美":["samui","USM"],
+  "新加坡":["singapore","SIN"],"吉隆坡":["kuala lumpur","KUL"],"峇里":["bali","DPS"],"巴厘":["bali","DPS"],"雅加達":["jakarta","JKT"],
+  "河內":["hanoi","HAN"],"河内":["hanoi","HAN"],"胡志明":["ho chi minh","saigon","SGN"],"峴港":["da nang","DAD"],"岘港":["da nang","DAD"],"富國島":["phu quoc","PQC"],
+  "馬尼拉":["manila","MNL"],"宿霧":["cebu","CEB"],"長灘島":["boracay"],
+  "香港":["hong kong","HKG"],"澳門":["macau","MFM"],"澳门":["macau","MFM"],"上海":["shanghai","SHA"],"北京":["beijing","BJS"],
+  "深圳":["shenzhen","SZX"],"廣州":["guangzhou","CAN"],"三亞":["sanya","SYX"],"三亚":["sanya","SYX"],"杭州":["hangzhou","HGH"],"成都":["chengdu","CTU"],
+  "杜拜":["dubai","DXB"],"迪拜":["dubai","DXB"],"馬爾地夫":["maldives","MLE"],"马尔代夫":["maldives","MLE"],
+  "倫敦":["london","LON"],"巴黎":["paris","PAR"],"紐約":["new york","NYC"],"洛杉磯":["los angeles","LAX"],"舊金山":["san francisco","SFO"],
+  "雪梨":["sydney","SYD"],"悉尼":["sydney","SYD"],"墨爾本":["melbourne","MEL"],"夏威夷":["hawaii","maui","waikiki","kauai"],"檀香山":["honolulu","waikiki","HNL"],
+  "冰島":["iceland","reykjavik"],"雷克雅維克":["reykjavik"],
+  "萬豪":["marriott"],"万豪":["marriott"],"JW萬豪":["jw marriott"],"喜來登":["sheraton"],"喜来登":["sheraton"],"威斯汀":["westin"],
+  "麗思卡爾頓":["ritz-carlton","ritz carlton"],"丽思卡尔顿":["ritz-carlton","ritz carlton"],"麗思":["ritz"],"瑞吉":["st. regis","st regis"],
+  "豪華精選":["luxury collection"],"艾迪遜":["edition"],"寶格麗":["bulgari"],"萬麗":["renaissance"],"萬怡":["courtyard"],"万怡":["courtyard"],
+  "雅樂軒":["aloft"],"福朋":["four points"],"艾美":["le meridien","méridien"],"傲途格":["autograph"],"臻品之選":["tribute"],"源宿":["element"],
+  "萬楓":["fairfield"],"萬豪酒店式公寓":["residence inn"],"德爾塔":["delta"],"盖洛德":["gaylord"],"W酒店":["w "],"Moxy":["moxy"],
+  "洲際":["intercontinental"],"金普頓":["kimpton"],"英迪格":["indigo"],"皇冠假日":["crowne plaza"],"假日":["holiday inn"],"華邑":["hualuxe"],
+  "麗晶":["regent"],"六善":["six senses"],"逸衡":["voco"]
+};
+
+/* ---------- 狀態 ---------- */
 const $ = s => document.querySelector(s);
-const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-const fmt = (p,u) => p==null ? "-" : (u==="pts" ? p.toLocaleString()+" 點" : (u||"")+" "+p.toLocaleString());
-const short = p => p==null ? "" : String(p);
-let cur = 0, selDay = null;
-try { const k = localStorage.getItem("hm-hotel"); const i = DATA.hotels.findIndex(h=>h.id===k); if (i>=0) cur=i; } catch(e){}
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const fmt = (p,u) => p==null ? "-" : (u==="pts" || !u ? p.toLocaleString()+" 點" : u+" "+p.toLocaleString());
+const todayStr = (() => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; })();
+const LS = { get(k,d){ try{ const v=localStorage.getItem(k); return v==null?d:v; }catch(e){ return d; } },
+             set(k,v){ try{ localStorage.setItem(k,v); }catch(e){} } };
 
-$("#upd").textContent = "更新 " + DATA.updated;
+let DATA = {hotels:[],monitors:[],deals:[],updated:""};
+let WL = {hotels:[],monitors:[]}, WL_SHA = null;
+let DIR = null;      // 萬豪清單
+let curHotel = LS.get("hm-hotel", "");
+let selDay = null;
 
-document.querySelectorAll(".tab").forEach(b => b.onclick = () => {
-  document.querySelectorAll(".tab").forEach(x => x.classList.toggle("on", x===b));
-  ["cal","mon","deal"].forEach(v => $("#v-"+v).classList.toggle("hide", v!==b.dataset.v));
-  closeSheet();
-});
+function toast(msg){ const t=$("#toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove("show"),2400); }
+function token(){ return LS.get("hm-token",""); }
 
-function chips(){
-  $("#chips").innerHTML = DATA.hotels.map((h,i) =>
-    `<button class="chip ${i===cur?"on":""}" data-i="${i}">${esc(h.name)}</button>`).join("");
-  document.querySelectorAll(".chip").forEach(c => c.onclick = () => {
-    cur = +c.dataset.i; try{localStorage.setItem("hm-hotel", DATA.hotels[cur].id)}catch(e){}
-    closeSheet(); render();
+/* ---------- 資料載入 ---------- */
+async function loadData(){
+  if (EMBED) { DATA = EMBED; return; }
+  try { const r = await fetch("data.json?t="+Date.now()); if (r.ok) DATA = await r.json(); } catch(e) {}
+}
+async function loadWatchlist(){
+  const h = {"Accept":"application/vnd.github+json"};
+  if (token()) h.Authorization = "Bearer "+token();
+  try {
+    const r = await fetch(`https://api.github.com/repos/${REPO}/contents/${WL_PATH}?ref=main&t=${Date.now()}`, {headers:h, cache:"no-store"});
+    if (r.ok) {
+      const j = await r.json(); WL_SHA = j.sha;
+      WL = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(j.content.replace(/\n/g,"")), c=>c.charCodeAt(0))));
+      WL.hotels ||= []; WL.monitors ||= [];
+      return true;
+    }
+  } catch(e) {}
+  // 讀不到就用 data.json 的內容
+  WL = {hotels: DATA.hotels.map(h=>({id:h.id, chain:h.chain_id||"", code:h.code||"", name:h.name, city:h.city, mode:h.mode})),
+        monitors: DATA.monitors.map(m=>({hotel:m.hotel, date:m.date, max_price:m.max}))};
+  return false;
+}
+async function saveWatchlist(mutate, msg){
+  if (!token()) { openSettings("要新增或修改，請先在設定貼上 GitHub token"); return false; }
+  for (let attempt=0; attempt<2; attempt++){
+    const ok = await loadWatchlist();
+    if (!ok) { toast("讀不到 GitHub 清單，請檢查 token"); return false; }
+    const next = JSON.parse(JSON.stringify(WL));
+    mutate(next);
+    const body = { message: msg, branch:"main", sha: WL_SHA,
+      content: btoa(String.fromCharCode(...new TextEncoder().encode(JSON.stringify(next, null, 1)))) };
+    const r = await fetch(`https://api.github.com/repos/${REPO}/contents/${WL_PATH}`, {method:"PUT",
+      headers:{"Accept":"application/vnd.github+json","Authorization":"Bearer "+token(),"Content-Type":"application/json"}, body:JSON.stringify(body)});
+    if (r.ok) { const j=await r.json(); WL = next; WL_SHA = j.content.sha; renderAll(); toast("已儲存，下次抓價會套用"); return true; }
+    if (r.status === 409) continue;
+    toast(r.status===401||r.status===403 ? "token 無效或權限不足" : "儲存失敗（"+r.status+"）"); return false;
+  }
+  toast("儲存衝突，請重試"); return false;
+}
+async function loadDir(){
+  if (DIR) return DIR;
+  try { const r = await fetch("hotels-marriott.json"); DIR = r.ok ? await r.json() : []; } catch(e) { DIR = []; }
+  return DIR;
+}
+
+/* ---------- 共用 ---------- */
+const wlHotel = id => WL.hotels.find(h=>h.id===id);
+const dataHotel = id => DATA.hotels.find(h=>h.id===id);
+const hotelName = id => (wlHotel(id)||dataHotel(id)||{name:id}).name;
+function monState(m){
+  const dm = DATA.monitors.find(x=>x.hotel===m.hotel && x.date===m.date && x.max===m.max_price);
+  if (m.date < todayStr) return {state:"expired", dm};
+  if (dm && dm.state==="done") return {state:"done", dm};
+  return {state: dm ? "watch" : "pending", dm};
+}
+function minOf(h){
+  if (!h) return null;
+  const ok = Object.entries(h.days||{}).filter(([d,x])=>d>=todayStr && x.s==="ok" && x.p!=null);
+  if (!ok.length) return null;
+  const min = Math.min(...ok.map(([,x])=>x.p));
+  return {min, unit: ok[0][1].u, dates: ok.filter(([,x])=>x.p===min).map(([d])=>d)};
+}
+
+/* ---------- 分頁 ---------- */
+let view = LS.get("hm-view","home");
+function show(v){
+  view = v; LS.set("hm-view", v);
+  document.querySelectorAll("nav.tabbar button").forEach(b=>b.classList.toggle("on", b.dataset.v===v));
+  ["home","cal","mon","deal"].forEach(x=>$("#v-"+x).classList.toggle("hide", x!==v));
+  closeSheet(); window.scrollTo(0,0);
+}
+document.querySelectorAll("nav.tabbar button").forEach(b=>b.onclick=()=>show(b.dataset.v));
+
+/* ---------- 搜尋 ---------- */
+function parseUrl(q){
+  let m = q.match(/marriott\.com\/[^ ]*hotels\/([a-z0-9]{5})-([a-z0-9-]+)/i);
+  if (m) return {chain:"marriott", code:m[1].toUpperCase(), name:m[2].replace(/-/g," ")};
+  m = q.match(/ihg\.com\/([a-z-]+\/hotels\/[a-z]{2}\/[a-z]{2}\/[a-z0-9-]+)\/([a-z0-9]{5})\//i);
+  if (m) return {chain:"ihg", code:m[2].toUpperCase(), ihg_path:`${m[1]}/${m[2].toLowerCase()}`.toLowerCase()};
+  return null;
+}
+async function doSearch(){
+  const raw = $("#q").value.trim();
+  const box = $("#results");
+  if (!raw){ box.classList.add("hide"); return; }
+  box.classList.remove("hide");
+  const fromUrl = parseUrl(raw);
+  if (fromUrl){ box.innerHTML = addForm(fromUrl); bindAddForm(); return; }
+  box.innerHTML = '<div class="empty-note">搜尋中…</div>';
+  const dir = await loadDir();
+  // 中文轉英文關鍵字
+  let terms = [], iata = [];
+  let rest = raw;
+  Object.keys(ALIAS).sort((a,b)=>b.length-a.length).forEach(k=>{
+    if (rest.includes(k)) { rest = rest.replace(k," "); ALIAS[k].forEach(t=> /^[A-Z]{3}$/.test(t) ? iata.push(t) : terms.push(t.toLowerCase())); }
+  });
+  rest.split(/\s+/).filter(Boolean).forEach(t=>terms.push(t.toLowerCase()));
+  const code = /^[A-Za-z0-9]{5}$/.test(raw) ? raw.toUpperCase() : null;
+  // 城市詞（含 IATA）與其他詞分開：城市任一符合即可，其他詞全部要符合
+  const cityTerms = [], otherTerms = [];
+  terms.forEach(t => (Object.values(ALIAS).some(v=>v[0]===t) && !["marriott","sheraton","westin"].includes(t) && Object.entries(ALIAS).some(([k,v])=>v.includes(t) && v.some(x=>/^[A-Z]{3}$/.test(x)))) ? cityTerms.push(t) : otherTerms.push(t));
+  let res = dir.filter(([c,n])=>{
+    const nl = n.toLowerCase();
+    if (code && c===code) return true;
+    const cityOk = !cityTerms.length && !iata.length ? true :
+      cityTerms.some(t=>nl.includes(t)) || iata.some(i=>c.startsWith(i));
+    const otherOk = otherTerms.every(t=>nl.includes(t) || c.toLowerCase()===t);
+    return cityOk && otherOk && (cityTerms.length+iata.length+otherTerms.length>0);
+  }).slice(0,60);
+  let html = "";
+  if (code && !res.some(([c])=>c===code)) html += addForm({chain:"ihg", code});
+  html += res.length ? res.map(([c,n])=>{
+      const id = ("marriott-"+c).toLowerCase();
+      const have = WL.hotels.some(h=>h.code===c && h.chain==="marriott");
+      return `<div class="row"><div class="main"><div class="t">${esc(n)}</div><div class="s"><span class="badge">萬豪</span>${c}</div></div>
+        ${have ? '<span class="muted" style="font-size:13px">已收藏</span>' : `<button class="btn pri" data-add="${c}" data-name="${esc(n)}">收藏</button>`}</div>`;
+    }).join("") : (code ? "" : '<div class="empty-note">找不到符合的萬豪飯店。IHG 請輸入 5 碼代碼或貼上官網網址。</div>');
+  box.innerHTML = html;
+  box.querySelectorAll("[data-add]").forEach(b=>b.onclick=()=>addHotel({chain:"marriott", code:b.dataset.add, name:b.dataset.name}, b));
+  bindAddForm();
+}
+function addForm(h){
+  return `<div class="row" style="flex-wrap:wrap"><div class="main"><div class="t">新增 ${CHAIN[h.chain]||h.chain} 飯店 ${esc(h.code)}</div>
+    <div class="s">請輸入顯示名稱${h.chain==="ihg"?"（IHG 代碼可在官網飯店網址中找到，例如 …/taipei/<b>tpepi</b>/hoteldetail）":""}</div></div>
+    <div class="field" style="width:100%;margin-top:6px"><input id="addName" placeholder="例如：台北洲際" value="${esc(h.name?titleCase(h.name):"")}">
+    <button class="btn pri" id="addGo" data-chain="${h.chain}" data-code="${esc(h.code)}" data-path="${esc(h.ihg_path||"")}">收藏</button></div></div>`;
+}
+function titleCase(s){ return s.replace(/\b\w/g,c=>c.toUpperCase()); }
+function bindAddForm(){
+  const b = $("#addGo"); if (!b) return;
+  b.onclick = () => {
+    const name = $("#addName").value.trim() || b.dataset.code;
+    const h = {chain:b.dataset.chain, code:b.dataset.code, name};
+    if (b.dataset.path) h.ihg_path = b.dataset.path;
+    addHotel(h, b);
+  };
+}
+async function addHotel(h, btn){
+  if (btn) btn.disabled = true;
+  const id = `${h.chain}-${h.code}`.toLowerCase();
+  const rec = {id, chain:h.chain, code:h.code, name:h.name, mode:"points", alert_drop:true, drop_min:2000};
+  if (h.ihg_path) rec.ihg_path = h.ihg_path;
+  const ok = await saveWatchlist(w=>{ if (!w.hotels.some(x=>x.id===id || (x.chain===h.chain && x.code===h.code))) w.hotels.push(rec); }, `收藏 ${h.name}`);
+  if (ok) { toast("已收藏，約 30 分鐘內開始抓價"); doSearch(); } else if (btn) btn.disabled = false;
+}
+
+/* ---------- 收藏 ---------- */
+function renderFavs(){
+  $("#favcount").textContent = WL.hotels.length ? `${WL.hotels.length} 間` : "";
+  if (!WL.hotels.length){ $("#favs").innerHTML = '<div class="empty-note">還沒有收藏，先在上方搜尋飯店</div>'; return; }
+  $("#favs").innerHTML = WL.hotels.map(h=>{
+    const d = dataHotel(h.id), mn = minOf(d);
+    const sub = mn ? `最低 ${fmt(mn.min, mn.unit)}（${mn.dates.slice(0,2).map(x=>x.slice(5)).join("、")}）` : (d ? "目前沒有可訂日期" : "等待第一次抓價");
+    return `<div class="row"><div class="main" data-open="${h.id}" style="cursor:pointer">
+        <div class="t">${esc(h.name)}</div><div class="s"><span class="badge">${CHAIN[h.chain]||h.chain}</span>${esc(h.code)}　${sub}</div></div>
+      <label class="toggle" title="降價提示"><input type="checkbox" data-drop="${h.id}" ${h.alert_drop!==false?"checked":""}><span></span></label>
+      <button class="btn ghost danger" data-del="${h.id}" aria-label="取消收藏">✕</button></div>`;
+  }).join("") + '<div class="hint" style="margin-top:8px">開關＝降價提示（降 2,000 點以上或搶空轉有房時通知）</div>';
+  $("#favs").querySelectorAll("[data-open]").forEach(e=>e.onclick=()=>{ curHotel=e.dataset.open; LS.set("hm-hotel",curHotel); renderCal(); show("cal"); });
+  $("#favs").querySelectorAll("[data-drop]").forEach(e=>e.onchange=()=>{
+    const id=e.dataset.drop, v=e.checked;
+    saveWatchlist(w=>{ const h=w.hotels.find(x=>x.id===id); if(h) h.alert_drop=v; }, `${hotelName(id)} 降價提示${v?"開":"關"}`).then(ok=>{ if(!ok) e.checked=!v; });
+  });
+  $("#favs").querySelectorAll("[data-del]").forEach(e=>e.onclick=()=>{
+    const id=e.dataset.del;
+    if (!confirm(`取消收藏「${hotelName(id)}」？相關監控也會一併刪除`)) return;
+    saveWatchlist(w=>{ w.hotels=w.hotels.filter(x=>x.id!==id); w.monitors=w.monitors.filter(m=>m.hotel!==id); }, `取消收藏 ${hotelName(id)}`);
   });
 }
 
-function render(){
-  chips();
-  const h = DATA.hotels[cur];
-  if (!h){ $("#cal").innerHTML = '<p class="empty-note">尚無資料，請先執行 python run.py daily</p>'; $("#sum").innerHTML=""; return; }
-  const days = h.days, keys = Object.keys(days).sort();
-  const ok = keys.filter(k => days[k].s==="ok" && days[k].p!=null);
-  const prices = ok.map(k => days[k].p);
-  const min = Math.min(...prices), max = Math.max(...prices);
-  const lowCut = min + (max-min)*0.2;
-  const best = ok.filter(k => days[k].p===min);
-  const unit = ok.length ? days[ok[0]].u : "pts";
-  const monDates = new Set(DATA.monitors.filter(m=>m.hotel===h.id && m.state==="watch").map(m=>m.date));
-  $("#sum").innerHTML = `
-    <div><div class="name">${esc(h.name)}</div><div class="meta">${esc(h.chain)}${h.city?" · "+esc(h.city):""} · 抓取 ${esc(h.last||"-")}</div></div>
-    <div class="best">${ok.length?`<div class="meta">區間最低</div><b>${fmt(min,unit)}</b><div class="meta">${best.slice(0,3).map(d=>d.slice(5)).join("、")}${best.length>3?" 等":""}</div>`:""}</div>`;
-  if (!keys.length){ $("#cal").innerHTML = '<p class="empty-note">這間還沒有資料</p>'; return; }
-
-  // 依月份分組
-  const first = new Date(keys[0]+"T00:00"), last = new Date(keys[keys.length-1]+"T00:00");
+/* ---------- 日曆 ---------- */
+function renderCal(){
+  const list = WL.hotels.length ? WL.hotels : DATA.hotels;
+  if (!list.find(h=>h.id===curHotel)) curHotel = list[0] ? list[0].id : "";
+  $("#chips").innerHTML = list.map(h=>`<button class="chip ${h.id===curHotel?"on":""}" data-id="${h.id}">${esc(h.name)}</button>`).join("");
+  $("#chips").querySelectorAll(".chip").forEach(c=>c.onclick=()=>{ curHotel=c.dataset.id; LS.set("hm-hotel",curHotel); closeSheet(); renderCal(); });
+  if (!curHotel){ $("#sum").innerHTML='<div class="empty-note" style="grid-column:1/-1">先到「搜尋收藏」加入飯店</div>'; $("#cal").innerHTML=""; return; }
+  const wh = wlHotel(curHotel) || {}, h = dataHotel(curHotel);
+  const days = h ? h.days : {};
+  const ok = Object.entries(days).filter(([d,x])=>d>=todayStr && x.s==="ok" && x.p!=null);
+  const prices = ok.map(([,x])=>x.p);
+  const min = prices.length ? Math.min(...prices) : null, max = prices.length ? Math.max(...prices) : null;
+  const lowCut = min!=null ? min + (max-min)*0.2 : null;
+  const unit = ok.length ? ok[0][1].u : "pts";
+  const mons = new Set(WL.monitors.filter(m=>m.hotel===curHotel && monState(m).state!=="expired" && monState(m).state!=="done").map(m=>m.date));
+  const best = ok.filter(([,x])=>x.p===min).map(([d])=>d);
+  $("#sum").innerHTML = `<div><div class="name">${esc(wh.name||h?.name||curHotel)}</div>
+      <div class="meta">${CHAIN[wh.chain]||h?.chain||""} ${esc(wh.code||h?.code||"")}${h&&h.last?" · 抓取 "+esc(h.last):" · 等待第一次抓價"}</div></div>
+    <div class="best">${min!=null?`<div class="meta">區間最低</div><b>${fmt(min,unit)}</b><div class="meta">${best.slice(0,3).map(d=>d.slice(5)).join("、")}${best.length>3?" 等":""}</div>`:""}</div>`;
+  const start = new Date(todayStr+"T00:00"), end = new Date(start); end.setDate(end.getDate()+DAYS_AHEAD-1);
+  Object.keys(days).forEach(d=>{ const x=new Date(d+"T00:00"); if (x>end) end.setTime(x.getTime()); });
   let html = "";
-  for (let y=first.getFullYear(), m=first.getMonth(); y<last.getFullYear() || (y===last.getFullYear() && m<=last.getMonth()); m===11?(y++,m=0):m++){
-    html += `<div class="month"><h2>${y} 年 ${m+1} 月</h2><div class="grid">`;
-    html += ["日","一","二","三","四","五","六"].map((w,i)=>`<div class="dow ${i===0||i===6?"we":""}">${w}</div>`).join("");
-    const start = new Date(y,m,1).getDay(), n = new Date(y,m+1,0).getDate();
-    for (let i=0;i<start;i++) html += '<div class="cell empty"></div>';
+  for (let y=start.getFullYear(), m=start.getMonth(); y<end.getFullYear() || (y===end.getFullYear() && m<=end.getMonth()); m===11?(y++,m=0):m++){
+    html += `<div class="month"><h2>${y} 年 ${m+1} 月</h2><div class="grid">` +
+      ["日","一","二","三","四","五","六"].map((w,i)=>`<div class="dow ${i===0||i===6?"we":""}">${w}</div>`).join("");
+    const first = new Date(y,m,1).getDay(), n = new Date(y,m+1,0).getDate();
+    for (let i=0;i<first;i++) html += '<div class="cell blank"></div>';
     for (let d=1; d<=n; d++){
       const key = `${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
-      const wd = (start+d-1)%7, we = wd===0||wd===6, x = days[key];
-      let cls = "cell"+(we?" we":"")+(monDates.has(key)?" mon":"")+(key===selDay?" sel":"");
-      let p = "", c = "";
+      const wd = (first+d-1)%7, x = days[key];
+      let cls = "cell"+(wd===0||wd===6?" we":"")+(mons.has(key)?" mon":"")+(key===selDay?" sel":"");
+      if (key < todayStr){ html += `<div class="${cls} past"><span class="d">${d}</span></div>`; continue; }
+      let p="", c="";
       if (x){
-        if (x.s==="sold_out"){ c = '<span class="sold">搶空</span>'; }
-        else if (x.p!=null){
-          p = short(x.p);
+        if (x.s==="sold_out" || x.s==="premium") c = '<span class="sold">搶空</span>';
+        else if (x.s==="ok" && x.p!=null){
+          p = String(x.p);
           if (x.p===min) cls += " lowest"; else if (x.p<=lowCut) cls += " low";
           if (x.new) c = '<span class="down">新開</span>';
           else if (x.delta>0) c = `<span class="up">漲${x.delta.toLocaleString()}</span>`;
           else if (x.delta<0) c = `<span class="down">降${(-x.delta).toLocaleString()}</span>`;
         }
-      } else cls += " na";
-      html += x ? `<button class="${cls}" data-k="${key}"><span class="d">${d}</span><span class="p">${p}</span><span class="c">${c}</span></button>`
-                : `<div class="${cls} empty"><span class="d">${d}</span></div>`;
+      }
+      html += `<button class="${cls}" data-k="${key}"><span class="d">${d}</span><span class="p">${p}</span><span class="c">${c}</span></button>`;
     }
     html += "</div></div>";
   }
   $("#cal").innerHTML = html;
-  document.querySelectorAll(".cell[data-k]").forEach(b => b.onclick = () => openSheet(b.dataset.k));
+  $("#cal").querySelectorAll(".cell[data-k]").forEach(b=>b.onclick=()=>openDay(b.dataset.k));
 }
 
 function spark(hist){
-  const pts = hist.filter(r=>r[2]==="ok" && r[1]!=null);
+  const pts = (hist||[]).filter(r=>r[2]==="ok" && r[1]!=null);
   if (pts.length<2) return "";
-  const vs = pts.map(r=>r[1]), lo=Math.min(...vs), hi=Math.max(...vs), W=300, H=70, pad=6;
+  const vs = pts.map(r=>r[1]), lo=Math.min(...vs), hi=Math.max(...vs), W=300, H=64, pad=6;
   const xy = pts.map((r,i)=>[pad+i*(W-2*pad)/(pts.length-1), H-pad-(hi===lo?0.5:(r[1]-lo)/(hi-lo))*(H-2*pad)]);
   const d = xy.map((p,i)=>(i?"L":"M")+p[0].toFixed(1)+" "+p[1].toFixed(1)).join(" ");
   const lp = xy[xy.length-1];
-  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-label="價格走勢">
-    <path d="${d}" fill="none" stroke="var(--accent)" stroke-width="2" vector-effect="non-scaling-stroke"/>
-    <circle cx="${lp[0]}" cy="${lp[1]}" r="3.5" fill="var(--accent)"/></svg>`;
+  return `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><path d="${d}" fill="none" stroke="var(--accent)" stroke-width="2" vector-effect="non-scaling-stroke"/><circle cx="${lp[0]}" cy="${lp[1]}" r="3.5" fill="var(--accent)"/></svg>`;
 }
+function openSheet(html){ $("#sheet").innerHTML = html; $("#sheet").classList.add("open"); $("#scrim").classList.add("open"); }
+function closeSheet(){ $("#sheet").classList.remove("open"); $("#scrim").classList.remove("open"); if (selDay){ selDay=null; if(view==="cal") renderCal(); } }
+$("#scrim").onclick = closeSheet;
+document.addEventListener("keydown", e=>{ if (e.key==="Escape") closeSheet(); });
 
-function openSheet(k){
-  selDay = k; render();
-  const h = DATA.hotels[cur], x = h.days[k];
+function openDay(k){
+  selDay = k; renderCal();
+  const wh = wlHotel(curHotel)||{}, h = dataHotel(curHotel), x = h && h.days[k];
   const wd = "日一二三四五六"[new Date(k+"T00:00").getDay()];
-  const mon = DATA.monitors.find(m=>m.hotel===h.id && m.date===k);
-  let change = "";
-  if (x.new) change = '<span class="down">由搶空轉為有房</span>';
-  else if (x.delta>0) change = `<span class="up">較前次漲 ${x.delta.toLocaleString()}</span>`;
-  else if (x.delta<0) change = `<span class="down">較前次降 ${(-x.delta).toLocaleString()}</span>`;
-  const hist = x.h.slice(-6).reverse().map(r=>`${r[0].slice(5)}　${r[2]==="sold_out"?"搶空":fmt(r[1],x.u)}`).join("<br>");
-  $("#sheet").innerHTML = `
-    <div class="row"><div><b>${esc(h.name)}</b><div class="hist">${k}（${wd}）入住 1 晚</div></div>
-      <div class="big">${x.s==="sold_out"?'<span class="sold">搶空</span>':fmt(x.p,x.u)}</div></div>
-    <div class="row" style="margin-top:4px"><span class="hist">${mon?`監控門檻 < ${mon.max.toLocaleString()}（${mon.state==="done"?"已完成":"監控中"}）`:"未設監控"}</span>${change}</div>
-    ${spark(x.h)}
+  const mon = WL.monitors.find(m=>m.hotel===curHotel && m.date===k);
+  let price = '<span class="muted">尚無資料</span>', change = "";
+  if (x){
+    if (x.s==="sold_out") price = `<span class="sold">搶空</span>`;
+    else if (x.s==="premium") price = `<span class="sold">搶空</span>`;
+    else price = fmt(x.p, x.u);
+    if (x.s==="premium") change = `<span class="muted">標準房已滿，只剩高階房 ${fmt(x.p,x.u)}</span>`;
+    else if (x.n) change = `<span class="muted">${esc(x.n)}</span>`;
+    if (x.new) change = '<span class="down">由搶空轉為有房</span>';
+    else if (x.delta>0) change = `<span class="up">較前次漲 ${x.delta.toLocaleString()}</span>`;
+    else if (x.delta<0) change = `<span class="down">較前次降 ${(-x.delta).toLocaleString()}</span>`;
+  }
+  const hist = x ? x.h.slice(-6).reverse().map(r=>`${r[0].slice(5)}　${r[2]==="sold_out"?"搶空":fmt(r[1],x.u)}`).join("<br>") : "";
+  const def = mon ? mon.max_price : (x && x.s==="ok" && x.p ? x.p : (minOf(h)||{}).min || 50000);
+  openSheet(`
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
+      <div><h3>${esc(wh.name||h?.name||"")}</h3><div class="hist">${k}（${wd}）入住 1 晚</div></div>
+      <div class="big">${price}</div></div>
+    <div style="margin-top:4px;font-size:13.5px">${change}</div>
+    ${x ? spark(x.h) : ""}
     <div class="hist">${hist}</div>
-    <div class="btns">${x.url?`<a class="btn pri" href="${esc(x.url)}" target="_blank" rel="noopener">前往官網</a>`:""}<button class="btn" onclick="closeSheet()">關閉</button></div>`;
-  $("#sheet").classList.add("open");
+    <div class="sec-title" style="margin-top:16px">${mon ? "監控中" : "加入監控"}<small>低於門檻時 LINE 通知</small></div>
+    <div class="field"><label for="thr">門檻（低於）</label><input id="thr" type="number" inputmode="numeric" step="1000" value="${def}"></div>
+    <div class="btns">
+      ${mon ? `<button class="btn danger" id="monDel">刪除監控</button><button class="btn pri" id="monSave">更新門檻</button>`
+            : `<button class="btn pri" id="monSave">加入監控</button>`}
+    </div>
+    <div class="btns">${x&&x.url?`<a class="btn" href="${esc(x.url)}" target="_blank" rel="noopener">前往官網</a>`:""}<button class="btn" id="sheetClose">關閉</button></div>`);
+  $("#sheetClose").onclick = closeSheet;
+  $("#monSave").onclick = () => {
+    const v = parseInt($("#thr").value, 10);
+    if (!(v>0)) { toast("請輸入門檻"); return; }
+    saveWatchlist(w=>{ w.monitors = w.monitors.filter(m=>!(m.hotel===curHotel && m.date===k)); w.monitors.push({hotel:curHotel, date:k, max_price:v}); },
+      `監控 ${hotelName(curHotel)} ${k} < ${v}`).then(ok=>{ if(ok) closeSheet(); });
+  };
+  if ($("#monDel")) $("#monDel").onclick = () => saveWatchlist(w=>{ w.monitors = w.monitors.filter(m=>!(m.hotel===curHotel && m.date===k)); },
+      `刪除監控 ${hotelName(curHotel)} ${k}`).then(ok=>{ if(ok) closeSheet(); });
 }
-function closeSheet(){ $("#sheet").classList.remove("open"); if (selDay){ selDay=null; render(); } }
 
+/* ---------- 監控 ---------- */
 function renderMon(){
-  const st = {watch:"監控中", done:"已完成", expired:"已過期"};
-  $("#mon").innerHTML = DATA.monitors.length ? DATA.monitors.map(m => `
-    <div class="mon-item">
-      <div class="t">${esc(m.date)}　${esc(m.name)}</div>
-      <div class="tag ${m.state}">${st[m.state]}</div>
-      <div class="s">門檻 < ${m.max.toLocaleString()}　目前 ${m.s==="sold_out"?"搶空":fmt(m.cur,m.unit)}</div>
-      <div class="s" style="text-align:right">${m.done_at?"完成 "+esc(m.done_at.slice(5)):""}</div>
-    </div>`).join("") : '<p class="empty-note">尚未設定監控，請在 config.yaml 的 monitors 新增</p>';
+  const st = {watch:"監控中", pending:"等待抓價", done:"已完成", expired:"已過期"};
+  const list = [...WL.monitors].sort((a,b)=>a.date.localeCompare(b.date));
+  if (!list.length){ $("#mon").innerHTML = '<div class="empty-note">還沒有監控。到「每日房價」點日期即可新增</div>'; return; }
+  $("#mon").innerHTML = list.map((m,i)=>{
+    const {state, dm} = monState(m);
+    const h = dataHotel(m.hotel), x = h && h.days[m.date];
+    const cur = x ? (x.s==="ok" ? fmt(x.p,x.u) : "搶空") : (dm && dm.cur!=null ? fmt(dm.cur, dm.unit) : "-");
+    return `<div class="row"><div class="main" data-goto="${i}" style="cursor:pointer">
+        <div class="t">${m.date.slice(5)}　${esc(hotelName(m.hotel))}</div>
+        <div class="s">門檻 &lt; ${m.max_price.toLocaleString()}　目前 ${cur}${dm&&dm.done_at?"　完成 "+esc(dm.done_at.slice(5)):""}</div></div>
+      <span class="tag ${state}">${st[state]}</span>
+      <button class="btn ghost danger" data-mdel="${i}" aria-label="刪除">✕</button></div>`;
+  }).join("");
+  $("#mon").querySelectorAll("[data-goto]").forEach(e=>e.onclick=()=>{ const m=list[+e.dataset.goto]; curHotel=m.hotel; LS.set("hm-hotel",curHotel); show("cal"); renderCal(); openDay(m.date); });
+  $("#mon").querySelectorAll("[data-mdel]").forEach(e=>e.onclick=()=>{
+    const m = list[+e.dataset.mdel];
+    if (!confirm(`刪除 ${m.date} ${hotelName(m.hotel)} 的監控？`)) return;
+    saveWatchlist(w=>{ w.monitors = w.monitors.filter(x=>!(x.hotel===m.hotel && x.date===m.date)); }, `刪除監控 ${hotelName(m.hotel)} ${m.date}`);
+  });
 }
+
+/* ---------- 優惠 ---------- */
 function renderDeals(){
-  $("#deal").innerHTML = DATA.deals.length ? DATA.deals.map(d => `
-    <a class="deal" href="${esc(d.link)}" target="_blank" rel="noopener">${esc(d.title)}<small>${esc(d.source)} · ${esc(d.seen)}</small></a>`).join("")
-    : '<p class="empty-note">目前沒有符合關鍵字的優惠文章</p>';
+  $("#deal").innerHTML = (DATA.deals||[]).length ? DATA.deals.map(d=>`<a class="deal" href="${esc(d.link)}" target="_blank" rel="noopener">${esc(d.title)}<small>${esc(d.source)} · ${esc(d.seen)}</small></a>`).join("")
+    : '<div class="empty-note">目前沒有符合關鍵字的優惠文章</div>';
 }
-document.addEventListener("keydown", e => { if (e.key==="Escape") closeSheet(); });
-render(); renderMon(); renderDeals();
+
+/* ---------- 設定 ---------- */
+function openSettings(msg){
+  const has = !!token();
+  openSheet(`<h3>設定</h3>
+    ${msg?`<div class="banner">${esc(msg)}</div>`:""}
+    <div class="sec-title" style="margin-top:14px">GitHub token <small>${has?"已設定":"未設定"}</small></div>
+    <div class="hint">新增、刪除收藏與監控需要 token（只存在這支手機的瀏覽器，不會上傳到網頁）。權限：只選 hotel-monitor repo，Contents 設為 Read and write。
+      <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">建立 token</a></div>
+    <div class="field"><input id="tok" type="password" placeholder="github_pat_…" autocomplete="off" value=""></div>
+    <div class="btns">${has?'<button class="btn danger" id="tokDel">移除 token</button>':""}<button class="btn pri" id="tokSave">儲存並測試</button></div>
+    <div class="sec-title" style="margin-top:18px">資料更新</div>
+    <div class="hint">你的電腦每天 07:13、19:13 抓完整 60 天日曆，每 30 分鐘檢查監控日期。新收藏的飯店會在下一次檢查時開始抓。</div>
+    <div class="btns"><button class="btn" id="sheetClose">關閉</button></div>`);
+  $("#sheetClose").onclick = closeSheet;
+  $("#tokSave").onclick = async () => {
+    const v = $("#tok").value.trim(); if (!v) { toast("請貼上 token"); return; }
+    const r = await fetch(`https://api.github.com/repos/${REPO}`, {headers:{"Authorization":"Bearer "+v,"Accept":"application/vnd.github+json"}});
+    if (!r.ok) { toast("token 無效"); return; }
+    const j = await r.json();
+    if (!(j.permissions && j.permissions.push)) { toast("token 沒有寫入權限"); return; }
+    LS.set("hm-token", v); toast("token 已儲存"); closeSheet(); await loadWatchlist(); renderAll();
+  };
+  if ($("#tokDel")) $("#tokDel").onclick = () => { try{ localStorage.removeItem("hm-token"); }catch(e){} toast("已移除"); closeSheet(); };
+}
+$("#btnSettings").onclick = () => openSettings();
+
+/* ---------- 啟動 ---------- */
+function renderAll(){ renderFavs(); renderCal(); renderMon(); renderDeals(); $("#upd").textContent = DATA.updated ? "更新 "+DATA.updated.slice(5) : ""; }
+let qTimer; $("#q").addEventListener("input", ()=>{ clearTimeout(qTimer); qTimer=setTimeout(doSearch, 250); });
+(async () => {
+  await loadData();
+  await loadWatchlist();
+  show(view);
+  renderAll();
+})();
 </script>
 </body>
 </html>
