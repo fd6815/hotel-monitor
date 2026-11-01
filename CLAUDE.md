@@ -48,6 +48,7 @@ GitHub Actions 雲端直接抓萬豪會被 Akamai 擋（Access Denied），IHG �
 - 搜尋收藏：中文城市／品牌別名表 `ALIAS`＋萬豪清單；IHG 輸入 5 碼代碼或貼 ihg.com 網址。
 - 日曆：一次一個月，‹ › 最遠 12 個月。60 天以後的月份停留 1.5 秒才送 `type:"month"` 請求（電腦只補 60 天以後、過期超過一天的日期）。
 - 開頁送 `type:"open"` 請求（15 分鐘內不重複）：電腦查所有監控日期＋目前飯店當月。
+- 設定裡的「立即完整更新」送 `type:"daily"` 請求（10 分鐘內不重複）：電腦查所有收藏飯店未來 60 天＋監控日期，並檢查降價。
 - 點日期：看點數／現金／每萬點價值、加入／修改／刪除監控（門檻為點數）。
 - 寫入需 GitHub token，存在手機瀏覽器 localStorage `hm-token`。
 - 請求完成判斷：data.json 的 `requests_done` 含請求 id，網頁每 20 秒輪詢。
@@ -67,7 +68,7 @@ GitHub Actions 雲端直接抓萬豪會被 Akamai 擋（Access Denied），IHG �
 
 ## 待辦／待確認（2026-11-02 00:12）
 1. 00:13 排程結果：HotelMon Poll 已建立成功。萬豪月曆 API 回 403 Access Denied — 因為 23:58 跑 probe5 連開 3 頁後又被暫時封鎖，不代表 API 寫法錯。等封鎖解除（約 1–2 小時）後再確認月曆 API 速度、點數正確、STANDARD 現金是否可用，以及手機請求（open、month）有被 poll 處理。
-2. 使用者想要「立即完整更新」：新增 request type `daily`（poll 收到就跑完整 60 天），網頁設定加按鈕。
+2. poll 不管抓取成功或被封鎖都會把請求標為完成：被擋時網頁仍顯示「房價已更新」，month 請求也不會重試（00:14 名古屋萬豪 2027-01、02 就是這樣）。
 3. 萬豪現金若 STANDARD 不行：抓官網現金月曆頁的 GraphQL（之前 probe5 flex_cash 被暫時封鎖沒抓到）。
 4. 監控門檻目前只有點數，可考慮加現金門檻。
 5. IHG 飯店清單尚未建立（ihg.com 擋雲端），目前只能用代碼或網址新增。
@@ -75,4 +76,5 @@ GitHub Actions 雲端直接抓萬豪會被 Akamai 擋（Access Denied），IHG �
 
 ## 修改後部署
 - 電腦程式：直接改這個資料夾的檔案即可，下一次排程生效。
-- 手機網頁：改 `site/index.html` 後 push 到 GitHub（pages.yml 自動部署）。repo 裡也有一份 Python 程式碼，修改後請同步 push。
+- 手機網頁：`site/` 只在 GitHub，這個資料夾沒有。下載 `site/index.html` 修改後上傳（pages.yml 自動部署）。repo 裡也有一份 Python 程式碼，修改後請同步上傳。
+- 這個資料夾不是 git repo，電腦也沒裝 git：上傳一律用 GitHub contents API（PUT，要帶檔案目前的 sha），token 用 `data\github_token.txt`。
