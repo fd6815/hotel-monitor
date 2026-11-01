@@ -207,6 +207,10 @@ def poll(a, cfg, db, hotels, by_id, pending):
     try:
         today = date.today()
         targets = {}
+        full = any(r.get("type") == "daily" for r in pending)
+        if full:   # 手機按「立即完整更新」：所有收藏飯店，範圍同每日排程
+            for h in hotels:
+                targets.setdefault(h["id"], set()).update(target_dates(cfg, h, "daily"))
         for r in pending:
             h = by_id.get(r.get("hotel"))
             if h and r.get("month"):
@@ -228,6 +232,8 @@ def poll(a, cfg, db, hotels, by_id, pending):
             msgs += alerts.check_monitors(db, cfg, by_id)
             for h in hotels:
                 msgs += alerts.check_errors(db, h, results.get(h["id"], []), a.fetch_day)
+                if full:
+                    msgs += alerts.check_drops(db, cfg, h, a.fetch_day)
         for r in pending:
             db.mark_sent("req:" + str(r["id"]))
         for m in msgs:
