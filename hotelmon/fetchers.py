@@ -54,7 +54,7 @@ TEMPLATES = {
 }
 
 SOLD_OUT = re.compile(
-    r"sold out|no rooms? (?:are )?available|no availability|not available for|unavailable for your dates|"
+    r"sold out|has no available rooms|no available rooms|no rooms? (?:are )?available|no availability|not available for|unavailable for your dates|"
     r"no rates (?:are )?available|無空房|已售完|已客滿|满房|無可用房",
     re.I,
 )
