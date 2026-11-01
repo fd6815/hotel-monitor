@@ -12,7 +12,9 @@
 import argparse
 import asyncio
 import random
+import time
 from datetime import date, timedelta
+from pathlib import Path
 
 import sys
 
@@ -24,7 +26,7 @@ for _s in (sys.stdout, sys.stderr):
     except Exception:  # noqa: BLE001
         pass
 
-from hotelmon import alerts, deals, notify, report
+from hotelmon import alerts, deals, notify, publish, report
 from hotelmon.db import DB
 from hotelmon.fetchers import BrowserFetcher, DemoFetcher
 
@@ -68,7 +70,10 @@ async def collect(cfg, db, hotels, mode, fetch_day):
                     res.append(q)
                     print(f"  {h['name']} {d} {q.status} {q.price or ''} {q.note}")
                     if delay and i < len(dates):
-                        await asyncio.sleep(random.uniform(lo, hi))
+                        if h["chain"] == "ihg" and not h.get("url_template"):
+                            await asyncio.sleep(random.uniform(0.5, 1.5))
+                        else:
+                            await asyncio.sleep(random.uniform(lo, hi))
                 results[h["id"]] = res
     return results
 
@@ -78,6 +83,7 @@ def main():
     ap.add_argument("cmd", choices=["daily", "watch", "deals", "report", "login"])
     ap.add_argument("-c", "--config", default="config.yaml")
     ap.add_argument("--fetch-day", default=date.today().isoformat())
+    ap.add_argument("--no-publish", action="store_true", help="不上傳到 GitHub")
     a = ap.parse_args()
 
     cfg = load(a.config)
@@ -89,6 +95,21 @@ def main():
         asyncio.run(login(cfg))
         return
 
+    lock = Path(cfg.get("data_dir", "data")) / "run.lock"
+    if a.cmd in ("daily", "watch"):
+        lock.parent.mkdir(parents=True, exist_ok=True)
+        if lock.exists() and time.time() - lock.stat().st_mtime < 90 * 60:
+            print("另一個抓取還在執行，這次略過")
+            return
+        lock.write_text(a.cmd)
+    try:
+        run_cmd(a, cfg, db, hotels, by_id)
+    finally:
+        if a.cmd in ("daily", "watch"):
+            lock.unlink(missing_ok=True)
+
+
+def run_cmd(a, cfg, db, hotels, by_id):
     msgs = []
     if a.cmd in ("daily", "watch"):
         results = asyncio.run(collect(cfg, db, hotels, a.cmd, a.fetch_day))
@@ -102,30 +123,23 @@ def main():
     for m in msgs:
         notify.send(cfg, m)
     if a.cmd in ("daily", "watch", "report"):
-        print("日曆頁：", report.write(db, cfg, hotels))
+        out = report.write(db, cfg, hotels)
+        print("日曆頁：", out)
+        if not a.no_publish:
+            publish.publish(cfg, out)
 
 
 async def login(cfg):
-    from playwright.async_api import async_playwright
-    b = cfg.get("browser", {})
-    async with async_playwright() as pw:
-        kw = {"headless": False}
-        if b.get("channel"):
-            kw["channel"] = b["channel"]
-        prof = b.get("profile_dir", "data/browser-profile")
-        try:
-            ctx = await pw.chromium.launch_persistent_context(prof, **kw)
-        except Exception:  # noqa: BLE001
-            kw.pop("channel", None)
-            ctx = await pw.chromium.launch_persistent_context(prof, **kw)
-        page = ctx.pages[0] if ctx.pages else await ctx.new_page()
-        for url in ["https://www.marriott.com/sign-in.mi", "https://www.ihg.com/rewardsclub/us/en/sign-in",
-                    "https://www.hyatt.com/", "https://all.accor.com/"]:
-            p = await ctx.new_page()
+    """開本程式專用的 Chrome，讓你登入萬豪、IHG 等會員（之後抓價沿用登入狀態，可選）。"""
+    from hotelmon.fetchers import BrowserFetcher
+    cfg = dict(cfg)
+    cfg["browser"] = dict(cfg.get("browser", {}), offscreen=False)
+    async with BrowserFetcher(cfg) as f:
+        for url in ["https://www.marriott.com/sign-in.mi", "https://www.ihg.com/rewardsclub/us/en/sign-in"]:
+            p = await f.ctx.new_page()
             await p.goto(url)
-        await page.close()
-        input("請在開啟的視窗登入各會員，完成後回到這裡按 Enter 關閉…")
-        await ctx.close()
+        await asyncio.get_running_loop().run_in_executor(
+            None, input, "請在開啟的 Chrome 視窗登入，完成後回到這裡按 Enter 關閉…")
 
 
 if __name__ == "__main__":

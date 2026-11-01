@@ -3,6 +3,12 @@
 每日積分／現金房價日曆、指定日期門檻監控、收藏降價與新開通知、優惠 RSS 情報。
 全部由 Python 程式定時執行，不使用 AI。
 
+## 架構（目前使用方式）
+- 抓價在你的 Windows 電腦執行（家用網路，官網不會擋）：萬豪用一般 Chrome 開官網房價頁，IHG 直接呼叫官網 API。
+- 抓完把日曆頁上傳到本 repo 的 `site/index.html`，GitHub Actions 自動發布到 https://fd6815.github.io/hotel-monitor/ 給手機看。
+- 上傳需要 GitHub token，放在電腦的 `data\github_token.txt`（不會上傳到 repo）。
+- 雲端（GitHub Actions）直接抓萬豪會被防火牆擋（Access Denied），所以不在雲端抓價。
+
 ## 功能
 | 功能 | 指令 | 建議頻率 |
 |---|---|---|

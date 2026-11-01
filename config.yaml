@@ -1,17 +1,28 @@
-# 雲端（GitHub Actions）用設定。Telegram 金鑰放在 repo 的 Secrets，不寫在這裡。
+# 房價監控設定（在你的電腦上執行）
 db_path: data/hotelmon.db
 data_dir: data
 output_dir: dist
-days_ahead: 60
+days_ahead: 60          # 每日日曆抓未來幾天
 adults: 2
 
 browser:
-  headless: false        # 雲端用 xvfb 虛擬螢幕，降低被判定為機器人
-  channel: chrome
-  profile_dir: data/browser-profile
-  locale: en-US
-  delay_seconds: [3, 6]
+  # exe: C:\Program Files\Google\Chrome\Application\chrome.exe   # 自動偵測，找不到再手動填
+  profile_dir: data/chrome-profile   # 程式專用 Chrome 設定檔（不影響你平常的 Chrome）
+  offscreen: true       # 視窗開在螢幕外，不干擾你使用電腦
+  delay_seconds: [3, 6] # 萬豪每次查詢間隔
   page_timeout: 45
+
+# 手機看日曆：上傳到 GitHub，網址 https://fd6815.github.io/hotel-monitor/
+github:
+  repo: fd6815/hotel-monitor
+  path: site/index.html
+  branch: main
+  # token 放在 data/github_token.txt（一行），不要寫在這裡
+
+# 通知（選填）
+telegram:
+  bot_token: ""
+  chat_id: ""
 
 hotels:
   - id: nagoya-marriott
@@ -27,12 +38,13 @@ hotels:
     name: 台北洲際
     chain: ihg
     code: TPEPI
+    ihg_path: intercontinental/hotels/us/en/taipei/tpepi
     city: 台北
     mode: points
     alert_drop: true
     drop_min: 2000
 
-monitors:
+monitors:               # 指定日期，低於門檻通知一次後轉為「已完成」
   - hotel: nagoya-marriott
     date: 2026-11-28
     max_price: 60000

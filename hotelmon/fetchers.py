@@ -1,12 +1,17 @@
-"""抓價：用 Playwright 開官網訂房頁，從頁面文字解析最低積分或現金價。
+"""抓價（純程式，不用 AI）
 
-不靠 AI，純規則解析。各集團官網改版時，只需調整 TEMPLATES 或在 config
-裡為單一飯店指定 url_template / price_selector。
+- 萬豪：用本機一般 Chrome（非自動化模式，透過 CDP 連線）開官網房價頁，解析「Points / Stay」。
+  萬豪的防機器人系統會擋 Playwright 自己啟動的瀏覽器，所以改用一般 Chrome。
+- IHG：在 ihg.com 頁面內直接呼叫官網 availability API，讀 rewardNights.pointsOnly.totalPoints。
+- 其他集團：開訂房頁，從頁面文字解析最低價格（需在 config 指定 url_template）。
 """
 import asyncio
 import hashlib
+import json
+import os
 import random
 import re
+import subprocess
 from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
@@ -22,17 +27,19 @@ class Quote:
     note: str = ""
 
 
-# 各集團訂房頁網址（單晚、1 間房）。{變數} 由 build_url 填入。
+IHG_API_KEY = "hsL8GAAz7drdIbEjBCejdA1Ud2MVhxoo"   # ihg.com 網頁前端公開使用的金鑰
+
 TEMPLATES = {
+    # 會自動轉到 rateListMenu.mi，列出各房型「Points / Stay」
     "marriott": (
-        "https://www.marriott.com/reservation/availabilitySearch.mi?propertyCode={code}"
-        "&fromDate={ci_mdy}&toDate={co_mdy}&numberOfRooms=1&numberOfAdults={adults}"
-        "&useRewardsPoints=true"
+        "https://www.marriott.com/search/availabilityCalendar.mi?propertyCode={code}"
+        "&fromDate={ci_mdy_enc}&toDate={co_mdy_enc}&flexibleDateSearch=false&lengthOfStay=1"
+        "&childrenCount=0&clusterCode=none&useRewardsPoints={use_points}&isAdvanceSearch=true"
+        "&isNGSF=false&numberOfRooms=1&numberOfAdults={adults}"
     ),
     "ihg": (
-        "https://www.ihg.com/hotels/us/en/find-hotels/select-roomrate?qSlH={code}"
-        "&qRms=1&qAdlt={adults}&qChld=0&qCiD={ci_d}&qCiMy={ci_my_ihg}"
-        "&qCoD={co_d}&qCoMy={co_my_ihg}&qRtP=IVANI&qAAR=IVANI&setPMCookies=true"
+        "https://www.ihg.com/{ihg_path}/hoteldetail/rooms?qCiD={ci_day}&qCiMy={ci_my_ihg}"
+        "&qCoD={co_day}&qCoMy={co_my_ihg}&qAdlt={adults}&qChld=0&qRms=1&qRtP={ihg_rate}"
     ),
     "hyatt": (
         "https://www.hyatt.com/shop/rooms/{code}?checkinDate={ci}&checkoutDate={co}"
@@ -45,10 +52,11 @@ TEMPLATES = {
 }
 
 SOLD_OUT = re.compile(
-    r"sold out|no rooms? (?:are )?available|no availability|not available for|"
-    r"無空房|已售完|已客滿|满房|無可用房",
+    r"sold out|no rooms? (?:are )?available|no availability|not available for|unavailable for your dates|"
+    r"no rates (?:are )?available|無空房|已售完|已客滿|满房|無可用房",
     re.I,
 )
+MAR_POINTS = re.compile(r"(\d{1,3}(?:,\d{3})+|\d{4,7})\s*Points\s*/\s*Stay", re.I)
 POINTS = re.compile(r"(\d{1,3}(?:,\d{3})+|\d{4,7})\s*(?:points?|pts|點數|點|積分|积分)", re.I)
 CASH = re.compile(
     r"(?:(TWD|NT\$|JPY|¥|USD|US\$|\$|THB|฿|KRW|₩|HKD|HK\$|SGD|S\$|EUR|€)\s?"
@@ -57,26 +65,44 @@ CASH = re.compile(
 CUR_NORMAL = {"NT$": "TWD", "¥": "JPY", "US$": "USD", "$": "USD", "฿": "THB",
               "₩": "KRW", "HK$": "HKD", "S$": "SGD", "€": "EUR"}
 
+CHROME_CANDIDATES = [
+    r"%LocalAppData%\Google\Chrome\Application\chrome.exe",
+    r"%ProgramFiles%\Google\Chrome\Application\chrome.exe",
+    r"%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe",
+    r"%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe",
+    r"%ProgramFiles%\Microsoft\Edge\Application\msedge.exe",
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    "/usr/bin/google-chrome",
+    "/usr/bin/chromium",
+]
+
 
 def build_url(hotel: dict, d: date, adults: int) -> str:
     tpl = hotel.get("url_template") or TEMPLATES[hotel["chain"]]
     co = d + timedelta(days=1)
+    points = hotel.get("mode", "points") == "points"
     return tpl.format(
         code=hotel.get("code", ""), adults=adults,
         ci=d.isoformat(), co=co.isoformat(),
         ci_mdy=d.strftime("%m/%d/%Y"), co_mdy=co.strftime("%m/%d/%Y"),
-        ci_d=f"{d.day:02d}", co_d=f"{co.day:02d}",
+        ci_mdy_enc=d.strftime("%m%%2F%d%%2F%Y"), co_mdy_enc=co.strftime("%m%%2F%d%%2F%Y"),
+        ci_day=d.day, co_day=co.day,
         # IHG 的月份是 0 起算（一月=00）
         ci_my_ihg=f"{d.month - 1:02d}{d.year}", co_my_ihg=f"{co.month - 1:02d}{co.year}",
+        ihg_path=hotel.get("ihg_path", f"hotels/us/en/{hotel.get('code', '').lower()}"),
+        ihg_rate="IVANI" if points else "IGCOR",
+        use_points="true" if points else "false",
     )
 
 
 def parse_price(text: str, hotel: dict):
-    """回傳 (price, unit)；找不到回傳 (None, None)。取頁面上的最低值。"""
-    lo, hi = hotel.get("price_range", [1000, 300000] if hotel.get("mode", "points") == "points" else [500, 2000000])
+    """通用解析：回傳 (price, unit)；找不到回傳 (None, None)。取頁面上的最低值。"""
+    points = hotel.get("mode", "points") == "points"
+    lo, hi = hotel.get("price_range", [1000, 500000] if points else [500, 5000000])
     ignore = set(hotel.get("ignore_values", []))
-    if hotel.get("mode", "points") == "points":
-        vals = [int(m.group(1).replace(",", "")) for m in POINTS.finditer(text)]
+    if points:
+        rx = MAR_POINTS if hotel["chain"] == "marriott" else POINTS
+        vals = [int(m.group(1).replace(",", "")) for m in rx.finditer(text)]
         vals = [v for v in vals if lo <= v <= hi and v not in ignore]
         return (min(vals), "pts") if vals else (None, None)
     want = hotel.get("currency")
@@ -89,74 +115,175 @@ def parse_price(text: str, hotel: dict):
     return min(found) if found else (None, None)
 
 
+def find_browser(cfg_path: str | None):
+    if cfg_path and Path(cfg_path).exists():
+        return cfg_path
+    for c in CHROME_CANDIDATES:
+        p = os.path.expandvars(c)
+        if Path(p).exists():
+            return p
+    return None
+
+
+IHG_JS = """async ([d1, d2, code, adults, key, rate]) => {
+  const body = {products:[{productCode:"SR",guestCounts:[{otaCode:"AQC10",count:adults},{otaCode:"AQC8",count:0}],
+      startDate:d1,endDate:d2,quantity:1}],
+    startDate:d1,endDate:d2,hotelMnemonics:[code],rates:{ratePlanCodes:[{internal:rate}]},
+    options:{disabilityMode:"ACCESSIBLE_AND_NON_ACCESSIBLE",returnAdditionalRatePlanDescriptions:false}};
+  const r = await fetch("https://apis.ihg.com/availability/v3/hotels/offers?fieldset=rateDetails", {method:"POST",
+    headers:{"content-type":"application/json","x-ihg-api-key":key,"accept-language":"en-US"},
+    body:JSON.stringify(body), credentials:"include"});
+  return {status:r.status, text: await r.text()};
+}"""
+
+
+def parse_ihg(hotel: dict, d: date, status: int, text: str) -> Quote:
+    hid = hotel["id"]
+    if status == 400 and "los" in text.lower():
+        return Quote(hid, d, None, None, "sold_out", "有最少住宿天數限制")
+    if status != 200:
+        return Quote(hid, d, None, None, "error", f"IHG API HTTP {status}: {text[:120]}")
+    try:
+        j = json.loads(text)
+        h = j["hotels"][0]
+        offers = h.get("rateDetails", {}).get("offers", [])
+    except Exception as e:  # noqa: BLE001
+        return Quote(hid, d, None, None, "error", f"IHG 回應格式異常：{e!s:.80}")
+    if hotel.get("mode", "points") == "points":
+        pts = []
+        for o in offers:
+            if o.get("ratePlanCode") != "IVANI" or o.get("availableStatus", "AVAILABLE") != "AVAILABLE":
+                continue
+            po = (o.get("rewardNights") or {}).get("pointsOnly") or {}
+            v = po.get("totalPoints") or po.get("averageDailyPoints")
+            if v:
+                pts.append(int(v))
+        if pts:
+            return Quote(hid, d, min(pts), "pts", "ok")
+        return Quote(hid, d, None, None, "sold_out", "無積分房")
+    cur = h.get("propertyCurrency", hotel.get("currency", ""))
+    vals = []
+    for o in offers:
+        if o.get("ratePlanCode") == "IVANI":
+            continue
+        try:
+            vals.append(round(float(o["totalRate"]["amountBeforeTax"])))
+        except Exception:  # noqa: BLE001
+            pass
+    if vals:
+        return Quote(hid, d, min(vals), cur, "ok", "未稅")
+    return Quote(hid, d, None, None, "sold_out")
+
+
 class BrowserFetcher:
-    """以本機 Chrome 的獨立設定檔執行，第一次可手動登入會員，之後沿用登入狀態。"""
+    """啟動本機一般 Chrome（獨立設定檔），以 CDP 連線控制；找不到 Chrome 時改用 Playwright 內建瀏覽器。"""
 
     def __init__(self, cfg: dict):
         self.cfg = cfg
         self.b = cfg.get("browser", {})
         self.debug_dir = Path(cfg.get("data_dir", "data")) / "debug"
+        self.proc = None
+        self.ihg_page = None
 
     async def __aenter__(self):
         from playwright.async_api import async_playwright
         self._pw = await async_playwright().start()
-        kw = dict(
-            headless=self.b.get("headless", False),
-            locale=self.b.get("locale", "en-US"),
-            viewport={"width": 1280, "height": 900},
-        )
-        if self.b.get("channel"):
-            kw["channel"] = self.b["channel"]
-        prof = self.b.get("profile_dir", "data/browser-profile")
-        try:
-            self.ctx = await self._pw.chromium.launch_persistent_context(prof, **kw)
-        except Exception as e:  # noqa: BLE001  沒裝 Chrome 時改用內建 Chromium
-            if not kw.pop("channel", None):
-                raise
-            print(f"[browser] 無法啟動 Chrome，改用 Chromium：{str(e)[:80]}")
-            self.ctx = await self._pw.chromium.launch_persistent_context(prof, **kw)
+        exe = find_browser(self.b.get("exe"))
+        port = int(self.b.get("cdp_port", 9333))
+        prof = Path(self.b.get("profile_dir", "data/chrome-profile")).resolve()
+        if exe:
+            args = [exe, f"--remote-debugging-port={port}", f"--user-data-dir={prof}",
+                    "--no-first-run", "--no-default-browser-check", "--window-size=1280,900",
+                    "--disable-backgrounding-occluded-windows", "--disable-renderer-backgrounding",
+                    "--disable-background-timer-throttling",
+                    "--disable-features=CalculateNativeWinOcclusion"]
+            if self.b.get("offscreen", True):
+                args.append("--window-position=-2400,0")
+            args.append("about:blank")
+            self.proc = subprocess.Popen(args)
+            last = None
+            for _ in range(20):
+                await asyncio.sleep(1)
+                try:
+                    self.br = await self._pw.chromium.connect_over_cdp(f"http://127.0.0.1:{port}")
+                    break
+                except Exception as e:  # noqa: BLE001
+                    last = e
+            else:
+                raise RuntimeError(f"無法連線到 Chrome：{last}")
+            self.ctx = self.br.contexts[0]
+        else:
+            print("[browser] 找不到 Chrome，改用 Playwright Chromium（萬豪可能會被擋）")
+            self.br = None
+            self.ctx = await self._pw.chromium.launch_persistent_context(
+                str(prof), headless=False, viewport={"width": 1280, "height": 900})
         self.page = self.ctx.pages[0] if self.ctx.pages else await self.ctx.new_page()
         return self
 
     async def __aexit__(self, *exc):
-        await self.ctx.close()
+        try:
+            if self.br:
+                await self.br.close()
+            else:
+                await self.ctx.close()
+        except Exception:  # noqa: BLE001
+            pass
+        if self.proc:
+            self.proc.terminate()
         await self._pw.stop()
 
     async def fetch(self, hotel: dict, d: date) -> Quote:
-        url = build_url(hotel, d, self.cfg.get("adults", 2))
-        timeout = int(self.b.get("page_timeout", 45))
         try:
-            await self.page.goto(url, wait_until="domcontentloaded", timeout=timeout * 1000)
-            sel = hotel.get("price_selector")
-            polls = max(4, timeout // 2)
-            for i in range(polls):
-                await self.page.wait_for_timeout(2000)
-                if sel:
-                    els = await self.page.query_selector_all(sel)
-                    text = "\n".join([await e.inner_text() for e in els])
-                else:
-                    text = await self.page.inner_text("body")
-                price, unit = parse_price(text, hotel)
-                if price:
-                    return Quote(hotel["id"], d, price, unit, "ok")
-                # 結果還在載入時可能短暫出現「not available」字樣，等幾輪再判定
-                if i >= 3 and SOLD_OUT.search(text):
-                    return Quote(hotel["id"], d, None, None, "sold_out")
-            await self._debug_shot(hotel, d)
-            return Quote(hotel["id"], d, None, None, "error", "頁面找不到價格")
+            if hotel["chain"] == "ihg" and not hotel.get("url_template"):
+                return await self._ihg(hotel, d)
+            return await self._page(hotel, d)
         except Exception as e:  # noqa: BLE001
-            await self._debug_shot(hotel, d)
+            await self._debug(self.page, hotel, d)
             return Quote(hotel["id"], d, None, None, "error", str(e)[:200])
 
-    async def _debug_shot(self, hotel, d):
-        try:
-            t = (await self.page.inner_text("body"))[:700].replace("\n", " | ")
-            print(f"  [debug] {hotel['id']} {d} url={self.page.url}\n  [debug] title={await self.page.title()}\n  [debug] text={t}")
-        except Exception as e:  # noqa: BLE001
-            print(f"  [debug] 無法讀取頁面：{e}")
+    async def _ihg(self, hotel, d):
+        if self.ihg_page is None:
+            self.ihg_page = await self.ctx.new_page()
+            await self.ihg_page.goto("https://www.ihg.com/hotels/us/en/reservation", wait_until="domcontentloaded", timeout=60000)
+            await self.ihg_page.wait_for_timeout(5000)
+        rate = "IVANI" if hotel.get("mode", "points") == "points" else "IGCOR"
+        res = await self.ihg_page.evaluate(IHG_JS, [d.isoformat(), (d + timedelta(days=1)).isoformat(),
+                                                    hotel["code"], int(self.cfg.get("adults", 2)),
+                                                    hotel.get("api_key", IHG_API_KEY), rate])
+        return parse_ihg(hotel, d, res["status"], res["text"])
+
+    async def _page(self, hotel, d):
+        url = build_url(hotel, d, self.cfg.get("adults", 2))
+        timeout = int(self.b.get("page_timeout", 45))
+        p = self.page
+        await p.goto(url, wait_until="domcontentloaded", timeout=timeout * 1000)
+        sel = hotel.get("price_selector")
+        for i in range(max(6, timeout // 2)):
+            await p.wait_for_timeout(2000)
+            title = await p.title()
+            if "access denied" in title.lower():
+                await self._debug(p, hotel, d)
+                return Quote(hotel["id"], d, None, None, "error", "被官網防火牆擋下（Access Denied）")
+            if sel:
+                els = await p.query_selector_all(sel)
+                text = "\n".join([await e.inner_text() for e in els])
+            else:
+                text = await p.inner_text("body")
+            price, unit = parse_price(text, hotel)
+            if price:
+                return Quote(hotel["id"], d, price, unit, "ok")
+            # 結果還在載入時可能短暫出現「not available」字樣，等幾輪再判定
+            if i >= 4 and SOLD_OUT.search(text):
+                return Quote(hotel["id"], d, None, None, "sold_out")
+        await self._debug(p, hotel, d)
+        return Quote(hotel["id"], d, None, None, "error", "頁面找不到價格")
+
+    async def _debug(self, page, hotel, d):
         try:
             self.debug_dir.mkdir(parents=True, exist_ok=True)
-            await self.page.screenshot(path=str(self.debug_dir / f"{hotel['id']}_{d}.png"))
+            t = (await page.inner_text("body"))[:1500]
+            (self.debug_dir / f"{hotel['id']}_{d}.txt").write_text(f"{page.url}\n\n{t}", encoding="utf-8")
+            await page.screenshot(path=str(self.debug_dir / f"{hotel['id']}_{d}.png"))
         except Exception:  # noqa: BLE001
             pass
 
