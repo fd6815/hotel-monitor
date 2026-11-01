@@ -189,4 +189,34 @@ lk.write_text("watch")
 assert run.lock_busy(lk)
 os.utime(lk, (0, 0))
 assert not run.lock_busy(lk)
+
+# IHG 清單：解析、30 天內不更新、太少或失敗不上傳
+from hotelmon import ihgdir
+rows = ihgdir.parse_rows(["https://www.ihg.com/intercontinental/hotels/us/en/taipei/tpepi/hoteldetail",
+                          "https://www.ihg.com/spnd/hotels/us/en/taipei/tpepi/hoteldetail",
+                          "https://www.ihg.com/voco/hotels/us/en/new-york/nycvo/hoteldetail",
+                          "https://www.ihg.com/voco/hotels/us/en/new-york/nycvo/hoteldetail/rooms"])
+assert rows == [["NYCVO", "voco", "new-york"], ["TPEPI", "intercontinental", "taipei"]], rows
+ups = []
+run.publish.publish = lambda c, p, path=None, message="": ups.append(path) or True
+c2 = {"data_dir": str(tmp), "output_dir": str(tmp / "out")}
+db2 = DB(str(tmp / "d.db"))
+async def few(cfg): return [["AAAAA", "voco", "x"]] * 10
+async def many(cfg): return [["AAAAA", "voco", "x"]] * 5000
+async def boom(cfg): raise RuntimeError("x")
+ihgdir.fetch = few
+run.refresh_ihg_dir(c2, db2)
+assert not ups and not db2.was_sent("ihg-dir")
+ihgdir.fetch = boom
+run.refresh_ihg_dir(c2, db2)
+assert not ups and not db2.was_sent("ihg-dir")
+ihgdir.fetch = many
+run.refresh_ihg_dir(c2, db2)
+assert ups == ["site/hotels-ihg.json"] and db2.was_sent("ihg-dir")
+run.refresh_ihg_dir(c2, db2)
+assert len(ups) == 1, ups
+old = (datetime.now() - timedelta(days=31)).strftime("%Y-%m-%d %H:%M")
+db2.con.execute("UPDATE alerts_sent SET sent_at=? WHERE key='ihg-dir'", (old,)); db2.con.commit()
+run.refresh_ihg_dir(c2, db2)
+assert len(ups) == 2, ups
 print("poll 測試全部通過")

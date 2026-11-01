@@ -210,6 +210,10 @@ const MAX_MONTHS = 12;
 const REQ_PATH = "watch/requests.json";
 const EMBED = null/*__DATA__*/;
 const CHAIN = {marriott:"萬豪", ihg:"IHG", hyatt:"凱悅", accor:"雅高"};
+const IHG_BRAND = {intercontinental:"InterContinental", holidayinn:"Holiday Inn", holidayinnexpress:"Holiday Inn Express", holidayinnresorts:"Holiday Inn Resort",
+  holidayinnclubvacations:"Holiday Inn Club Vacations", "holiday-inn-the-niu":"Holiday Inn The Niu", crowneplaza:"Crowne Plaza", candlewood:"Candlewood Suites", staybridge:"Staybridge Suites",
+  hotelindigo:"Hotel Indigo", voco:"voco", kimptonhotels:"Kimpton", evenhotels:"EVEN Hotels", avidhotels:"avid hotels", atwellsuites:"Atwell Suites", vignettecollection:"Vignette Collection",
+  regent:"Regent", armyhotels:"IHG Army Hotels", spnd:"IHG", "joia-iberostar":"Iberostar JOIA", "noted-collection":"Noted Collection"};
 
 /* 中文搜尋對照：城市（含機場代碼）、品牌 */
 const ALIAS = {
@@ -249,7 +253,7 @@ const LS = { get(k,d){ try{ const v=localStorage.getItem(k); return v==null?d:v;
 
 let DATA = {hotels:[],monitors:[],deals:[],updated:""};
 let WL = {hotels:[],monitors:[]}, WL_SHA = null;
-let DIR = null;      // 萬豪清單
+let DIR = null;      // 飯店清單 [代碼, 名稱, 集團, ihg_path]
 let curHotel = LS.get("hm-hotel", "");
 let selDay = null;
 let curMonth = todayStr.slice(0,7);
@@ -303,7 +307,10 @@ async function saveWatchlist(mutate, msg){
 }
 async function loadDir(){
   if (DIR) return DIR;
-  try { const r = await fetch("hotels-marriott.json"); DIR = r.ok ? await r.json() : []; } catch(e) { DIR = []; }
+  const get = async f => { try { const r = await fetch(f); return r.ok ? await r.json() : []; } catch(e) { return []; } };
+  const [mar, ihg] = await Promise.all([get("hotels-marriott.json"), get("hotels-ihg.json")]);
+  DIR = [...mar.map(([c,n])=>[c,n,"marriott",""]),
+         ...ihg.map(([c,b,city])=>[c, `${IHG_BRAND[b]||titleCase(b.replace(/-/g," "))} ${titleCase(city.replace(/-/g," "))}`, "ihg", `${b}/hotels/us/en/${city}/${c.toLowerCase()}`])];
   return DIR;
 }
 
@@ -370,17 +377,17 @@ async function doSearch(){
       cityTerms.some(t=>nl.includes(t)) || iata.some(i=>c.startsWith(i));
     const otherOk = otherTerms.every(t=>nl.includes(t) || c.toLowerCase()===t);
     return cityOk && otherOk && (cityTerms.length+iata.length+otherTerms.length>0);
-  }).slice(0,60);
+  });
+  res = [...res.filter(r=>r[2]==="marriott").slice(0,40), ...res.filter(r=>r[2]==="ihg").slice(0,40)];
   let html = "";
   if (code && !res.some(([c])=>c===code)) html += addForm({chain:"ihg", code});
-  html += res.length ? res.map(([c,n])=>{
-      const id = ("marriott-"+c).toLowerCase();
-      const have = WL.hotels.some(h=>h.code===c && h.chain==="marriott");
-      return `<div class="row"><div class="main"><div class="t">${esc(n)}</div><div class="s"><span class="badge">萬豪</span>${c}</div></div>
-        ${have ? '<span class="muted" style="font-size:13px">已收藏</span>' : `<button class="btn pri" data-add="${c}" data-name="${esc(n)}">收藏</button>`}</div>`;
-    }).join("") : (code ? "" : '<div class="empty-note">找不到符合的萬豪飯店。IHG 請輸入 5 碼代碼或貼上官網網址。</div>');
+  html += res.length ? res.map(([c,n,chain,path])=>{
+      const have = WL.hotels.some(h=>h.code===c && h.chain===chain);
+      return `<div class="row"><div class="main"><div class="t">${esc(n)}</div><div class="s"><span class="badge">${CHAIN[chain]}</span>${c}</div></div>
+        ${have ? '<span class="muted" style="font-size:13px">已收藏</span>' : `<button class="btn pri" data-add="${c}" data-name="${esc(n)}" data-chain="${chain}" data-path="${esc(path)}">收藏</button>`}</div>`;
+    }).join("") : (code ? "" : '<div class="empty-note">找不到符合的飯店。可輸入 5 碼代碼或貼上官網網址。</div>');
   box.innerHTML = html;
-  box.querySelectorAll("[data-add]").forEach(b=>b.onclick=()=>addHotel({chain:"marriott", code:b.dataset.add, name:b.dataset.name}, b));
+  box.querySelectorAll("[data-add]").forEach(b=>b.onclick=()=>addHotel({chain:b.dataset.chain, code:b.dataset.add, name:b.dataset.name, ihg_path:b.dataset.path}, b));
   bindAddForm();
 }
 function addForm(h){
@@ -405,7 +412,7 @@ async function addHotel(h, btn){
   const rec = {id, chain:h.chain, code:h.code, name:h.name, mode:"points", alert_drop:true, drop_min:2000};
   if (h.ihg_path) rec.ihg_path = h.ihg_path;
   const ok = await saveWatchlist(w=>{ if (!w.hotels.some(x=>x.id===id || (x.chain===h.chain && x.code===h.code))) w.hotels.push(rec); }, `收藏 ${h.name}`);
-  if (ok) { toast("已收藏，約 30 分鐘內開始抓價"); doSearch(); } else if (btn) btn.disabled = false;
+  if (ok) { toast(h.chain==="ihg" ? "已收藏，打開日曆就會查價" : "已收藏，約 30 分鐘內開始抓價"); doSearch(); } else if (btn) btn.disabled = false;
 }
 
 /* ---------- 收藏 ---------- */

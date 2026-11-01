@@ -19,14 +19,14 @@ def _token(cfg):
     return t
 
 
-def publish(cfg, file_path: Path):
+def publish(cfg, file_path: Path, path=None, message="更新房價資料"):
     gh = cfg.get("github") or {}
     repo = gh.get("repo")
     token = _token(cfg)
     if not repo or not token:
         print("[publish] 未設定 github.repo 或 token，略過上傳")
         return False
-    path = gh.get("data_path", "site/data.json")
+    path = path or gh.get("data_path", "site/data.json")
     api = f"https://api.github.com/repos/{repo}/contents/{path}"
     h = {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"}
     try:
@@ -35,7 +35,7 @@ def publish(cfg, file_path: Path):
         if r.status_code == 200:
             sha = r.json().get("sha")
         body = {
-            "message": "更新房價資料",
+            "message": message,
             "content": base64.b64encode(file_path.read_bytes()).decode(),
             "branch": gh.get("branch", "main"),
         }

@@ -7,12 +7,14 @@
   python run.py report    只重產日曆頁
   python run.py login     開瀏覽器讓你登入各集團會員（登入狀態會保留）
   python run.py poll      檢查手機網頁送來的更新請求（每分鐘由排程執行，沒請求就立即結束）
+  python run.py ihg-dir   立即更新 IHG 飯店清單（平常由 daily 每 30 天自動更新）
 
   共用參數：-c config.yaml   --fetch-day YYYY-MM-DD（測試用，模擬某天抓取）
 """
 import argparse
 import asyncio
 import calendar
+import json
 import os
 import random
 import subprocess
@@ -37,7 +39,7 @@ for _s in (sys.stdout, sys.stderr):
     except Exception:  # noqa: BLE001
         pass
 
-from hotelmon import alerts, deals, notify, publish, report, watchlist
+from hotelmon import alerts, deals, ihgdir, notify, publish, report, watchlist
 from hotelmon.db import DB
 from hotelmon.fetchers import BrowserFetcher, DemoFetcher, Quote
 
@@ -125,7 +127,7 @@ async def collect(cfg, db, hotels, mode, fetch_day, targets=None):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["daily", "watch", "deals", "report", "login", "test-line", "poll"])
+    ap.add_argument("cmd", choices=["daily", "watch", "deals", "report", "login", "test-line", "poll", "ihg-dir"])
     ap.add_argument("-c", "--config", default="config.yaml")
     ap.add_argument("--fetch-day", default=date.today().isoformat())
     ap.add_argument("--no-publish", action="store_true", help="不上傳到 GitHub")
@@ -158,19 +160,45 @@ def main():
         return poll(a, cfg, db, hotels, by_id, pending)
 
     lock = Path(cfg.get("data_dir", "data")) / "run.lock"
-    if a.cmd in ("daily", "watch"):
+    if a.cmd in ("daily", "watch", "ihg-dir"):
         lock.parent.mkdir(parents=True, exist_ok=True)
         if lock_busy(lock):
             print("另一個抓取還在執行，這次略過")
             return
         lock.write_text(str(os.getpid()))
     try:
-        run_cmd(a, cfg, db, hotels, by_id)
+        if a.cmd == "ihg-dir":
+            refresh_ihg_dir(cfg, db, force=True)
+        else:
+            run_cmd(a, cfg, db, hotels, by_id)
+        if a.cmd == "daily" and not a.no_publish and cfg.get("github", {}).get("repo"):
+            refresh_ihg_dir(cfg, db)
     finally:
-        if a.cmd in ("daily", "watch"):
+        if a.cmd in ("daily", "watch", "ihg-dir"):
             lock.unlink(missing_ok=True)
     if a.cmd in ("daily", "watch"):
         ensure_poll_task()
+
+
+def refresh_ihg_dir(cfg, db, force=False):
+    """每 30 天更新一次 IHG 飯店清單（由 daily 觸發）；失敗就沿用舊清單，下次 daily 再試。"""
+    last = db.was_sent("ihg-dir")
+    if not force and last and (datetime.now() - datetime.strptime(last, "%Y-%m-%d %H:%M")).days < 30:
+        return
+    try:
+        rows = asyncio.run(ihgdir.fetch(cfg))
+    except Exception as e:  # noqa: BLE001
+        print(f"[ihg-dir] 更新失敗：{e!s:.150}")
+        return
+    if len(rows) < 3000:
+        print(f"[ihg-dir] 只抓到 {len(rows)} 間，太少，沿用舊清單")
+        return
+    out = Path(cfg.get("output_dir", "dist")) / "hotels-ihg.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(rows, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    print(f"[ihg-dir] {len(rows)} 間")
+    if publish.publish(cfg, out, "site/hotels-ihg.json", "更新 IHG 飯店清單"):
+        db.mark_sent("ihg-dir")
 
 
 def ensure_poll_task():
