@@ -1,0 +1,10 @@
+{
+ "hotels": [
+  {"id": "nagoya-marriott", "chain": "marriott", "code": "NGODT", "name": "名古屋萬豪", "city": "名古屋", "mode": "points", "alert_drop": true, "drop_min": 2000},
+  {"id": "ic-taipei", "chain": "ihg", "code": "TPEPI", "name": "台北洲際", "city": "台北", "mode": "points", "alert_drop": true, "drop_min": 2000, "ihg_path": "intercontinental/hotels/us/en/taipei/tpepi"}
+ ],
+ "monitors": [
+  {"hotel": "nagoya-marriott", "date": "2026-11-28", "max_price": 60000},
+  {"hotel": "ic-taipei", "date": "2026-12-06", "max_price": 65000}
+ ]
+}
