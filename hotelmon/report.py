@@ -4,7 +4,7 @@ import statistics
 from datetime import date
 from pathlib import Path
 
-from .alerts import monitor_key
+from .alerts import blocked_chains, monitor_key
 from .db import now
 from .fetchers import build_url
 from . import fx
@@ -71,6 +71,7 @@ def build(db, cfg, hotels):
             "state": "done" if done else ("expired" if d < today else "watch"), "done_at": done,
         })
     data["requests_done"] = [k[4:] for k in db.recent_keys("req:")]
+    data["blocked"] = [{"chain": CHAIN_LABEL.get(c, c), "retry": t.strftime("%H:%M")} for c, t in blocked_chains(db).items()]
     for r in db.recent_deals(30):
         data["deals"].append({"title": r["title"], "link": r["link"], "source": r["source"], "seen": r["seen_at"]})
     return data
