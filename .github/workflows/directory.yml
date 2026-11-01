@@ -1,0 +1,21 @@
+name: 更新飯店清單
+
+on:
+  schedule:
+    - cron: "37 18 * * 0"   # 每週一 02:37（台北）
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 tools/build_marriott_dir.py
+      - run: |
+          git config user.name "hotel-monitor-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add site/hotels-marriott.json
+          git diff --cached --quiet || (git commit -m "更新萬豪飯店清單" && git pull --rebase && git push)
