@@ -271,6 +271,9 @@ class BrowserFetcher:
                 text = await p.inner_text("body")
             price, unit = parse_price(text, hotel)
             if price:
+                cap = hotel.get("standard_max")
+                if cap and price > cap:     # 標準房已滿、只剩高階房型
+                    return Quote(hotel["id"], d, None, None, "sold_out", f"只剩高階房 {price:,}")
                 return Quote(hotel["id"], d, price, unit, "ok")
             # 結果還在載入時可能短暫出現「not available」字樣，等幾輪再判定
             if i >= 4 and SOLD_OUT.search(text):

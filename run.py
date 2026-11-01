@@ -76,7 +76,8 @@ async def collect(cfg, db, hotels, mode, fetch_day):
                             break
                         continue   # 被擋的結果不寫入，避免蓋掉前次價格
                     denied = 0
-                    db.save_quote(q, fetch_day)
+                    if q.status != "error":      # 失敗不寫入，保留之前抓到的價格
+                        db.save_quote(q, fetch_day)
                     if delay and i < len(dates):
                         if h["chain"] == "ihg" and not h.get("url_template"):
                             await asyncio.sleep(random.uniform(0.5, 1.5))
