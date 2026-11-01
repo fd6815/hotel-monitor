@@ -20,6 +20,16 @@
    "alert_drop": true,
    "drop_min": 2000,
    "ihg_path": "intercontinental/hotels/us/en/taipei/tpepi"
+  },
+  {
+   "id": "ihg-tpehs",
+   "chain": "ihg",
+   "code": "TPEHS",
+   "name": "新北洲際",
+   "mode": "points",
+   "alert_drop": true,
+   "drop_min": 2000,
+   "ihg_path": "intercontinental/hotels/us/en/new-taipei-city/tpehs"
   }
  ],
  "monitors": [
