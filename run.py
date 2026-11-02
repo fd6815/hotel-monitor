@@ -42,6 +42,7 @@ for _s in (sys.stdout, sys.stderr):
 
 from hotelmon import alerts, deals, ihgdir, notify, publish, report, ustatz, watchlist
 from hotelmon.db import DB
+from hotelmon.alerts import OFFICIAL
 from hotelmon.fetchers import BrowserFetcher, DemoFetcher, Quote
 
 
@@ -84,12 +85,56 @@ def update_marriott(cfg, db, hotels, fetch_day, now=None):
             print(f"  [ustatz] {h['name']} 失敗：{e!s:.120}")
             results[h["id"]] = [Quote(h["id"], now.date(), None, None, "error", f"ustatz 讀取失敗：{e!s:.80}")]
             continue
+        official = {d for d, s in db.snapshots(h["id"], now.date().isoformat()).items()
+                    if s[0]["note"] == OFFICIAL and s[0]["fetch_day"] == fetch_day}   # 官網今天查過的日期不蓋掉
         for q in qs:
-            db.save_quote(q, fetch_day)
+            if q.stay_date.isoformat() not in official:
+                db.save_quote(q, fetch_day)
         print(f"  [ustatz] {h['name']} {len(qs)} 天")
         db.mark_sent(key)
         results[h["id"]] = qs
     return results
+
+
+async def update_marriott_official(cfg, db, hotels, fetch_day, now=None):
+    """萬豪監控日期每天 07:00 後用官網月曆 API 查一次，不管成敗當天都不重試，避免延長封鎖。回傳要通知的訊息。"""
+    now = now or datetime.now()
+    if now.hour < 7 or cfg.get("marriott_api"):
+        return []
+    targets = {}
+    for m in cfg.get("monitors", []):
+        d = str(m["date"])
+        key = f"maroff:{now.date()}:{m['hotel']}:{d}"
+        if d >= now.date().isoformat() and any(h["id"] == m["hotel"] and h["chain"] == "marriott" for h in hotels) \
+                and not db.was_sent(key):
+            db.mark_sent(key)
+            targets.setdefault(m["hotel"], set()).add(date.fromisoformat(d))
+    if not targets:
+        return []
+    failed = []
+    try:
+        async with BrowserFetcher(cfg) as f:
+            for h in hotels:
+                if h["id"] not in targets:
+                    continue
+                qs = None if f.mar_blocked else await f.marriott_range(dict(h, cash=False), sorted(targets[h["id"]]))
+                if qs is None:
+                    failed.append(h["name"])
+                    continue
+                for q in qs:
+                    prev = db.snapshots(h["id"], q.stay_date.isoformat()).get(q.stay_date.isoformat())
+                    if prev:   # 官網這裡只查點數，現金沿用 ustatz
+                        q.cash, q.cash_unit = prev[0]["cash"], prev[0]["cash_unit"]
+                    q.note = OFFICIAL
+                    db.save_quote(q, fetch_day)
+                    print(f"  [官網] {h['name']} {q.stay_date} {q.status} {q.price or ''}")
+    except Exception as e:  # noqa: BLE001
+        print(f"  [官網] 失敗：{e!s:.120}")
+        failed = [h["name"] for h in hotels if h["id"] in targets]
+    if not failed:
+        return []
+    print(f"  [官網] 查不到：{'、'.join(failed)}")
+    return [f"【萬豪官網】今天查不到 {'、'.join(failed)}（可能被封鎖），監控日期先用 ustatz 資料，明天再試"]
 
 
 async def collect(cfg, db, hotels, mode, fetch_day, targets=None):
@@ -377,6 +422,7 @@ def run_cmd(a, cfg, db, hotels, by_id):
         results = update_marriott(cfg, db, run_hotels, a.fetch_day)
         browser_hotels = [h for h in run_hotels if h["chain"] != "marriott" or cfg.get("marriott_api")]
         results.update(asyncio.run(collect(cfg, db, browser_hotels, a.cmd, a.fetch_day)))
+        msgs += asyncio.run(update_marriott_official(cfg, db, hotels, a.fetch_day))
         alerts.update_blocks(db, hotels, results)
         msgs += alerts.check_monitors(db, cfg, by_id)
         for h in hotels:

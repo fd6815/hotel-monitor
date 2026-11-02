@@ -554,7 +554,7 @@ function renderStatus(){
       : `<span class="dot"></span>更新中：${esc(what)}（已送出 ${mins} 分鐘${p.type==="daily"?"":"，萬豪一個月約需 8 分鐘"}）`;
   } else if (isMarriott(curHotel)) {
     const h = dataHotel(curHotel);
-    el.className = "status"; el.textContent = `萬豪資料來自 ustatz（PY的旅行大小事），每天讀取一次${h&&h.last?"，上次讀取 "+h.last.slice(5):""}（不是對方的資料時間）。訂房前請到官網確認`;
+    el.className = "status"; el.textContent = `萬豪監控日期每天查官網一次，其他日期來自 ustatz（PY的旅行大小事），每天讀取一次${h&&h.last?"，上次讀取 "+h.last.slice(5):""}（不是對方的資料時間）。訂房前請到官網確認`;
   } else if (curHotel && !isLive(curHotel) && monthNeedsFetch(curHotel, curMonth)) {
     el.className = "status";
     el.innerHTML = token() ? "這個月還沒查過" : `這個月還沒查過，<a href="#" id="needTok">設定 token</a> 後切換月份會自動查詢`;
@@ -856,7 +856,7 @@ function openSettings(msg){
     <div class="field"><input id="tok" type="password" placeholder="github_pat_…" autocomplete="off" value=""></div>
     <div class="btns">${has?'<button class="btn danger" id="tokDel">移除 token</button>':""}<button class="btn pri" id="tokSave">儲存並測試</button></div>
     <div class="sec-title" style="margin-top:18px">資料更新</div>
-    <div class="hint">IHG 由這個網頁直接查官網（不用 token，也不用開電腦），結果只存在這個瀏覽器，同一個月 15 分鐘內不重複查。萬豪由電腦每天 07:00 後讀一次 ustatz（PY的旅行大小事）約 11 個月的資料，對方資料不一定最新、現金為含稅價，訂房前請到官網確認；切換月份只看已存的資料。LINE 通知一律由電腦發送。「立即完整更新」只查 IHG。</div>
+    <div class="hint">IHG 由這個網頁直接查官網（不用 token，也不用開電腦），結果只存在這個瀏覽器，同一個月 15 分鐘內不重複查。萬豪由電腦每天 07:00 後查一次官網（只查監控日期），並讀一次 ustatz（PY的旅行大小事）約 11 個月的資料，對方資料不一定最新、現金為含稅價，訂房前請到官網確認；切換月份只看已存的資料。LINE 通知一律由電腦發送。「立即完整更新」只查 IHG。</div>
     <div class="btns"><button class="btn" id="btnDaily">立即完整更新</button></div>
     <div class="btns"><button class="btn" id="sheetClose">關閉</button></div>`);
   $("#sheetClose").onclick = closeSheet;

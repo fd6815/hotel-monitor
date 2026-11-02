@@ -244,6 +244,44 @@ m6 = alerts.check_monitors(db6, c6, by_id)
 assert len(m6) == 1 and "58,000" in m6[0], m6
 assert not db6.was_sent(alerts.monitor_key(c6["monitors"][0])) and db6.was_sent(alerts.monitor_key(c6["monitors"][1]))
 
+# 萬豪監控日期每天查官網一次：蓋過 ustatz 點數、留現金、ustatz 重讀不蓋回；被擋不重試、傳一次通知
+db7 = DB(str(tmp / "o.db"))
+c7 = {"monitors": [{"hotel": "b", "date": md, "max_price": 60000}, {"hotel": "a", "date": md, "max_price": 60000}]}
+mdd = date.fromisoformat(md)
+db7.save_quote(run.Quote("b", mdd, 62000, "pts", "ok", cash=114000, cash_unit="JPY"), args.fetch_day)
+ranges = []
+class FakeBrowser:
+    mar_blocked = False
+    def __init__(self, cfg): pass
+    async def __aenter__(self): return self
+    async def __aexit__(self, *exc): pass
+    async def marriott_range(self, h, ds):
+        ranges.append((h["id"], ds, h.get("cash")))
+        if self.mar_blocked:
+            return None
+        return [run.Quote(h["id"], d, 59000, "pts", "ok") for d in ds]
+real_browser, run.BrowserFetcher = run.BrowserFetcher, FakeBrowser
+official = lambda c, db, when: asyncio.run(run.update_marriott_official(c, db, hotels, args.fetch_day, when))
+assert official(c7, db7, early) == [] and not ranges
+assert official({**c7, "marriott_api": True}, db7, later) == [] and not ranges
+assert official(c7, db7, later) == [] and ranges == [("b", [mdd], False)]   # 只查萬豪、不查現金
+row = db7.snapshots("b", md)[md][0]
+assert (row["price"], row["note"], row["cash"], row["cash_unit"]) == (59000, alerts.OFFICIAL, 114000, "JPY")
+assert official(c7, db7, later) == [] and len(ranges) == 1   # 當天不再查
+ustatz.fetch = lambda h: [run.Quote("b", mdd, 70000, "pts", "ok")]
+db7.clear_sent(f"mar:{later.date()}:b")
+run.update_marriott({}, db7, hotels, args.fetch_day, later)
+ustatz.fetch = real_ustatz_fetch
+assert db7.snapshots("b", md)[md][0]["price"] == 59000
+m7 = alerts.check_monitors(db7, c7, by_id)   # 官網來源：沒有 ustatz 註記，通知一次就完成
+assert len(m7) == 1 and "ustatz" not in m7[0] and db7.was_sent(alerts.monitor_key(c7["monitors"][0])), m7
+db8 = DB(str(tmp / "p.db"))
+FakeBrowser.mar_blocked = True
+m8 = official(c7, db8, later)
+assert len(m8) == 1 and "ustatz" in m8[0] and not db8.snapshots("b", md), m8
+assert official(c7, db8, later) == []   # 被擋當天不重試
+run.BrowserFetcher = real_browser
+
 # data.json 沒變不上傳；只有時間變也不上傳
 import json
 pubs = []

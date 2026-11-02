@@ -9,6 +9,7 @@ from .fetchers import build_url
 
 BLOCK_MINUTES = 30      # 被官網擋之後，最短隔多久再重試
 BLOCK_MAX_MINUTES = 360 # 一直被擋就把間隔拉長（等於已被擋多久），最長 6 小時，避免重試延長封鎖
+OFFICIAL = "官網"        # prices.note：這筆萬豪價格來自官網，不是 ustatz
 
 
 def hotel_failed(results) -> bool:
@@ -77,7 +78,7 @@ def check_monitors(db, cfg, hotels_by_id) -> list[str]:
         if cur["status"] == "ok" and cur["price"] is not None and cur["price"] < m["max_price"]:
             url = build_url(h, date.fromisoformat(d), cfg.get("adults", 2)) if h["chain"] != "demo" else ""
             # 萬豪資料來自第三方、可能過期：監控不結束，價格變了才再通知
-            third_party = h["chain"] == "marriott" and not cfg.get("marriott_api")
+            third_party = h["chain"] == "marriott" and not cfg.get("marriott_api") and cur["note"] != OFFICIAL
             key = f"{monitor_key(m)}:{cur['price']}" if third_party else monitor_key(m)
             if db.was_sent(key):
                 continue

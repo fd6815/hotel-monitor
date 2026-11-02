@@ -14,7 +14,7 @@ GitHub：`fd6815/hotel-monitor`（公開）。手機網頁：https://fd6815.gith
 每 30 分鐘隨 Watch 讀 RSS（config.yaml 的 `deals.feeds`）。網頁只留特價與優惠技巧；LINE 只傳 IHG／Avios／Alaska 點數特賣、bug 價、快速會籍匹配。翻譯用 Google 翻譯免費端點（非官方，失敗顯示原文）。
 
 ## 萬豪目前做法
-資料來源是第三方 ustatz.com（`hotelmon/ustatz.py`，一般 requests 可讀）：每間飯店每天 07:00 後讀一次，一次約 11 個月的點數與現金（含稅，IHG 是未稅），對方是預先抓好的，不一定最新。失敗照封鎖間隔重試。手機請求和切換月份都不觸發萬豪。萬豪到價通知不結束監控，價格變了才再通知（鍵 `mon:...:<價格>`）。官網月曆 API 和逐日開頁的程式還留著（config `marriott_api: true` 才用）。
+資料來源是第三方 ustatz.com（`hotelmon/ustatz.py`，一般 requests 可讀）：每間飯店每天 07:00 後讀一次，一次約 11 個月的點數與現金（含稅，IHG 是未稅），對方是預先抓好的，不一定最新。失敗照封鎖間隔重試。手機請求和切換月份都不觸發萬豪。監控日期另外每天 07:00 後用官網月曆 API 查一次（`update_marriott_official`，每個日期每天一次，失敗不重試，傳 LINE 後沿用 ustatz；鍵 `maroff:<今天>:<飯店>:<日期>`），只查點數，現金沿用 ustatz，`note` 記為「官網」。到價通知：官網來源通知一次就完成；ustatz 來源不結束監控，價格變了才再通知（鍵 `mon:...:<價格>`）。整段官網查價和逐日開頁的程式還留著（config `marriott_api: true` 才用）。
 
 ## 排程（pythonw 背景執行，需開機且登入，`data\run.lock` 防重複，90 分鐘逾時）
 `data.json` 沒實質變動就不上傳（`publish_data`，每天至少一次）。GitHub token 7 天內到期或失效會傳 LINE。
@@ -38,7 +38,7 @@ GitHub：`fd6815/hotel-monitor`（公開）。手機網頁：https://fd6815.gith
 - 電腦和手機會持續 commit 到 main，push 前先 `git pull --rebase`。改 `.github/workflows` 需要 token 有 Workflows 權限，目前沒有。
 
 ## 待辦
-1. 萬豪官網從 2026-11-01 23:58 起被擋（月曆 API 與訂房頁都 Access Denied），目前改用 ustatz。ustatz 改版或停站時 `ustatz.fetch` 會失敗並傳 LINE。
+1. 萬豪官網 2026-11-01 23:58 起被擋，2026-11-02 10:30 實測月曆 API 已解封；查太多次可能再被擋，所以只查監控日期、每天一次，其他日期仍用 ustatz。ustatz 改版或停站時 `ustatz.fetch` 會失敗並傳 LINE。
 5. 優惠來源「里程家」找不到網站，等使用者提供網址。
 2. 2026-11-02 00:22 的 poll 查台北洲際時瀏覽器中途關閉（Target page, context or browser has been closed），原因未查明，再發生要查。
 3. 監控門檻目前只有點數，可考慮加現金門檻。
