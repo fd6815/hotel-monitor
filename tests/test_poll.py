@@ -244,30 +244,36 @@ m6 = alerts.check_monitors(db6, c6, by_id)
 assert len(m6) == 1 and "58,000" in m6[0], m6
 assert not db6.was_sent(alerts.monitor_key(c6["monitors"][0])) and db6.was_sent(alerts.monitor_key(c6["monitors"][1]))
 
-# 萬豪監控日期每天查官網一次：蓋過 ustatz 點數、留現金、ustatz 重讀不蓋回；被擋不重試、傳一次通知
+# 萬豪監控日期每 8 小時查官網：蓋過 ustatz 點數、留現金、ustatz 重讀不蓋回；失敗等下一輪，被封鎖等到下一個 07:00
 db7 = DB(str(tmp / "o.db"))
 c7 = {"monitors": [{"hotel": "b", "date": md, "max_price": 60000}, {"hotel": "a", "date": md, "max_price": 60000}]}
 mdd = date.fromisoformat(md)
 db7.save_quote(run.Quote("b", mdd, 62000, "pts", "ok", cash=114000, cash_unit="JPY"), args.fetch_day)
 ranges = []
 class FakeBrowser:
-    mar_blocked = False
-    def __init__(self, cfg): pass
+    fail = None   # "denied" 被封鎖、"error" 其他失敗
+    def __init__(self, cfg): self.mar_blocked = False
     async def __aenter__(self): return self
     async def __aexit__(self, *exc): pass
     async def marriott_range(self, h, ds):
         ranges.append((h["id"], ds, h.get("cash")))
-        if self.mar_blocked:
+        if self.fail:
+            self.mar_blocked = self.fail == "denied"
             return None
         return [run.Quote(h["id"], d, 59000, "pts", "ok") for d in ds]
 real_browser, run.BrowserFetcher = run.BrowserFetcher, FakeBrowser
 official = lambda c, db, when: asyncio.run(run.update_marriott_official(c, db, hotels, args.fetch_day, when))
-assert official(c7, db7, early) == [] and not ranges
+at = lambda hour, days=0: later.replace(hour=hour) + timedelta(days=days)
 assert official({**c7, "marriott_api": True}, db7, later) == [] and not ranges
 assert official(c7, db7, later) == [] and ranges == [("b", [mdd], False)]   # 只查萬豪、不查現金
 row = db7.snapshots("b", md)[md][0]
 assert (row["price"], row["note"], row["cash"], row["cash_unit"]) == (59000, alerts.OFFICIAL, 114000, "JPY")
-assert official(c7, db7, later) == [] and len(ranges) == 1   # 當天不再查
+assert official(c7, db7, at(14)) == [] and len(ranges) == 1   # 同一輪不再查
+assert official(c7, db7, at(15)) == [] and len(ranges) == 2
+assert official(c7, db7, at(23)) == [] and len(ranges) == 3
+assert official(c7, db7, at(6, 1)) == [] and len(ranges) == 3   # 隔天清晨還是 23 點那一輪
+row = db7.snapshots("b", md)[md][0]
+assert (row["cash"], row["cash_unit"]) == (114000, "JPY")
 ustatz.fetch = lambda h: [run.Quote("b", mdd, 70000, "pts", "ok")]
 db7.clear_sent(f"mar:{later.date()}:b")
 run.update_marriott({}, db7, hotels, args.fetch_day, later)
@@ -276,10 +282,18 @@ assert db7.snapshots("b", md)[md][0]["price"] == 59000
 m7 = alerts.check_monitors(db7, c7, by_id)   # 官網來源：沒有 ustatz 註記，通知一次就完成
 assert len(m7) == 1 and "ustatz" not in m7[0] and db7.was_sent(alerts.monitor_key(c7["monitors"][0])), m7
 db8 = DB(str(tmp / "p.db"))
-FakeBrowser.mar_blocked = True
+FakeBrowser.fail, ranges[:] = "denied", []
 m8 = official(c7, db8, later)
-assert len(m8) == 1 and "ustatz" in m8[0] and not db8.snapshots("b", md), m8
-assert official(c7, db8, later) == []   # 被擋當天不重試
+assert len(m8) == 1 and "被封鎖" in m8[0] and "ustatz" in m8[0] and not db8.snapshots("b", md), m8
+for when in (at(15), at(23), at(6, 1)):   # 被封鎖：下一個 07:00 前都不查、不再通知
+    assert official(c7, db8, when) == [] and len(ranges) == 1
+FakeBrowser.fail = "error"
+m8 = official(c7, db8, at(7, 1))           # 隔天再試；其他失敗不算封鎖，下一輪就再試
+assert len(ranges) == 2 and len(m8) == 1 and "被封鎖" not in m8[0], m8
+assert official(c7, db8, at(14, 1)) == [] and len(ranges) == 2
+official(c7, db8, at(15, 1))
+assert len(ranges) == 3
+FakeBrowser.fail = None
 run.BrowserFetcher = real_browser
 
 # data.json 沒變不上傳；只有時間變也不上傳

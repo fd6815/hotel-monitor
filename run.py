@@ -97,14 +97,16 @@ def update_marriott(cfg, db, hotels, fetch_day, now=None):
 
 
 async def update_marriott_official(cfg, db, hotels, fetch_day, now=None):
-    """萬豪監控日期每天 07:00 後用官網月曆 API 查一次，不管成敗當天都不重試，避免延長封鎖。回傳要通知的訊息。"""
+    """萬豪監控日期每 8 小時（07、15、23 點起算）用官網月曆 API 查一次；失敗等下一輪，被封鎖就等到下一個 07:00。回傳要通知的訊息。"""
     now = now or datetime.now()
-    if now.hour < 7 or cfg.get("marriott_api"):
+    shifted = now - timedelta(hours=7)   # 一天從 07:00 算起
+    blocked_key = f"maroff-blocked:{shifted.date()}"
+    if cfg.get("marriott_api") or db.was_sent(blocked_key):
         return []
     targets = {}
     for m in cfg.get("monitors", []):
         d = str(m["date"])
-        key = f"maroff:{now.date()}:{m['hotel']}:{d}"
+        key = f"maroff:{shifted.date()}:{shifted.hour // 8}:{m['hotel']}:{d}"
         if d >= now.date().isoformat() and any(h["id"] == m["hotel"] and h["chain"] == "marriott" for h in hotels) \
                 and not db.was_sent(key):
             db.mark_sent(key)
@@ -112,12 +114,14 @@ async def update_marriott_official(cfg, db, hotels, fetch_day, now=None):
     if not targets:
         return []
     failed = []
+    blocked = False
     try:
         async with BrowserFetcher(cfg) as f:
             for h in hotels:
                 if h["id"] not in targets:
                     continue
                 qs = None if f.mar_blocked else await f.marriott_range(dict(h, cash=False), sorted(targets[h["id"]]))
+                blocked = blocked or f.mar_blocked
                 if qs is None:
                     failed.append(h["name"])
                     continue
@@ -133,8 +137,11 @@ async def update_marriott_official(cfg, db, hotels, fetch_day, now=None):
         failed = [h["name"] for h in hotels if h["id"] in targets]
     if not failed:
         return []
-    print(f"  [官網] 查不到：{'、'.join(failed)}")
-    return [f"【萬豪官網】今天查不到 {'、'.join(failed)}（可能被封鎖），監控日期先用 ustatz 資料，明天再試"]
+    print(f"  [官網] 查不到：{'、'.join(failed)}{'（被封鎖）' if blocked else ''}")
+    if blocked:
+        db.mark_sent(blocked_key)
+        return [f"【萬豪官網】被封鎖，查不到 {'、'.join(failed)}，監控日期先用 ustatz 資料，下一個 07:00 後再試"]
+    return [f"【萬豪官網】查不到 {'、'.join(failed)}，監控日期先用 ustatz 資料，下一輪（8 小時內）再試"]
 
 
 async def collect(cfg, db, hotels, mode, fetch_day, targets=None):
