@@ -28,11 +28,30 @@ import yaml
 
 BASE = Path(__file__).resolve().parent
 os.chdir(BASE)   # 排程執行時工作目錄不一定在這裡
+class _Stamped:
+    """log 每行前面加時間，被擋時才查得出是哪一次。"""
+    def __init__(self, f):
+        self.f, self.bol = f, True
+
+    def write(self, s):
+        out = []
+        for part in s.splitlines(True):
+            if self.bol:
+                out.append(datetime.now().strftime("%m-%d %H:%M:%S "))
+            out.append(part)
+            self.bol = part.endswith("\n")
+        self.f.write("".join(out))
+        return len(s)
+
+    def flush(self):
+        self.f.flush()
+
+
 if sys.stdout is None or sys.stderr is None:   # pythonw 沒有主控台，輸出寫到 log
     (BASE / "data").mkdir(exist_ok=True)
     _name = next((c for c in sys.argv[1:] if c in ("daily", "watch")), "poll")
     _log = open(BASE / "data" / f"{_name}.log", "a", encoding="utf-8", buffering=1)
-    sys.stdout = sys.stderr = _log
+    sys.stdout = sys.stderr = _Stamped(_log)
 
 for _s in (sys.stdout, sys.stderr):
     try:
@@ -150,6 +169,9 @@ async def collect(cfg, db, hotels, mode, fetch_day, targets=None):
         targets = {h["id"]: target_dates(cfg, h, mode, db) for h in hotels}
     hotels = [h for h in hotels if targets.get(h["id"])]   # 沒有要查的日期就不開瀏覽器、不連官網
     lo, hi = cfg.get("browser", {}).get("delay_seconds", [4, 9])
+    ilo, ihi = cfg.get("browser", {}).get("ihg_delay_seconds", [3, 6])
+    cap = int(cfg.get("ihg_daily_cap", 150))
+    stopped = set()   # 這次執行已被擋的集團：同集團其他飯店也不再查
     demo = [h for h in hotels if h["chain"] == "demo"]
     real = [h for h in hotels if h["chain"] != "demo"]
     groups = []
@@ -176,29 +198,32 @@ async def collect(cfg, db, hotels, mode, fetch_day, targets=None):
                             print(f"  {h['name']} {q.stay_date} {q.status} {q.price or ''} {q.note} {q.cash or ''}{q.cash_unit or ''}")
                         results[h["id"]] = qs
                         continue
-                if h["chain"] == "marriott" and getattr(f, "mar_blocked", False):   # 被擋就停，再開網頁只會延長封鎖
-                    print(f"  {h['name']} 被官網擋，這次先停止，保留前次資料")
+                if h["chain"] in stopped or (h["chain"] == "marriott" and getattr(f, "mar_blocked", False)):
+                    print(f"  {h['name']} 被官網擋，這次先停止，保留前次資料")   # 被擋就停，再查只會延長封鎖
                     results[h["id"]] = [Quote(h["id"], d, None, None, "error", "被官網防火牆擋下（Access Denied）") for d in dates]
                     continue
-                denied = 0
+                counted = h["chain"] == "ihg"
+                calls_key = f"calls:ihg:{date.today()}"
                 for i, d in enumerate(dates, 1):
+                    if counted and db.counter(calls_key) >= cap:
+                        print(f"  IHG 今天已查 {cap} 次，達上限，其餘日期明天再查")
+                        break
                     q = await f.fetch(h, d)
+                    if counted:
+                        db.bump(calls_key)
                     res.append(q)
-                    print(f"  {h['name']} {d} {q.status} {q.price or ''} {q.note}")
-                    if "Access Denied" in q.note:
-                        denied += 1
-                        if denied >= (1 if h["chain"] == "marriott" else 3):
-                            print(f"  {h['name']} 連續被官網擋，這次先停止，保留前次資料")
-                            if h["chain"] == "marriott":
-                                f.mar_blocked = True
-                            break
-                        continue   # 被擋的結果不寫入，避免蓋掉前次價格
-                    denied = 0
+                    print(f"  {h['name']} {d} {q.status} {q.price or ''} {q.note:.80}")
+                    if alerts.is_denied(q.note):
+                        print(f"  {h['name']} 被官網擋，這次先停止同集團全部查詢，保留前次資料")
+                        stopped.add(h["chain"])
+                        if h["chain"] == "marriott":
+                            f.mar_blocked = True
+                        break   # 被擋的結果不寫入，避免蓋掉前次價格
                     if q.status != "error":      # 失敗不寫入，保留之前抓到的價格
                         db.save_quote(q, fetch_day)
                     if delay and i < len(dates):
                         if h["chain"] == "ihg" and not h.get("url_template"):
-                            await asyncio.sleep(random.uniform(0.5, 1.5))
+                            await asyncio.sleep(random.uniform(ilo, ihi))
                         else:
                             await asyncio.sleep(random.uniform(lo, hi))
                 results[h["id"]] = res
@@ -264,6 +289,14 @@ def main():
             lock.unlink(missing_ok=True)
     if a.cmd in ("daily", "watch"):
         ensure_poll_task()
+
+
+def ihg_watch_due(cfg, db, now=None):
+    """Watch 每 30 分鐘跑，IHG 監控日期預設每 2 小時才查一次（排程時間會差一兩分鐘，留 10 分鐘彈性）。"""
+    last = db.was_sent("ihg-watch")
+    now = now or datetime.now()
+    gap = timedelta(minutes=int(cfg.get("ihg_watch_minutes", 120)) - 10)
+    return not last or now - datetime.strptime(last, "%Y-%m-%d %H:%M") >= gap
 
 
 def weekly_full_due(db, today=None):
@@ -428,6 +461,11 @@ def run_cmd(a, cfg, db, hotels, by_id):
         run_hotels = alerts.not_blocked(db, hotels)
         results = update_marriott(cfg, db, run_hotels, a.fetch_day)
         browser_hotels = [h for h in run_hotels if h["chain"] != "marriott" or cfg.get("marriott_api")]
+        if a.cmd == "watch" and any(h["chain"] == "ihg" for h in browser_hotels):
+            if ihg_watch_due(cfg, db):
+                db.mark_sent("ihg-watch")
+            else:   # IHG 監控日期每 ihg_watch_minutes 才查；還沒資料的新飯店照抓
+                browser_hotels = [h for h in browser_hotels if h["chain"] != "ihg" or not db.last_fetch(h["id"])]
         results.update(asyncio.run(collect(cfg, db, browser_hotels, a.cmd, a.fetch_day)))
         msgs += asyncio.run(update_marriott_official(cfg, db, hotels, a.fetch_day))
         alerts.update_blocks(db, hotels, results)

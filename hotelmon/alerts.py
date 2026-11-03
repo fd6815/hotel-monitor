@@ -12,8 +12,15 @@ BLOCK_MAX_MINUTES = 360 # 一直被擋就把間隔拉長（等於已被擋多久
 OFFICIAL = "官網"        # prices.note：這筆萬豪價格來自官網，不是 ustatz
 
 
+def is_denied(note) -> bool:
+    """官網防火牆擋下（萬豪、IHG 都是 Akamai 的 Access Denied；403／429 也算）。"""
+    return any(s in (note or "") for s in ("Access Denied", "HTTP 403", "HTTP 429"))
+
+
 def hotel_failed(results) -> bool:
-    """這次抓取算失敗：連 3 筆以上出錯（被官網擋、瀏覽器中途關閉），或全部日期都失敗；零星出錯不算。"""
+    """這次抓取算失敗：被官網擋過一次、連 3 筆以上出錯（瀏覽器中途關閉），或全部日期都失敗；零星出錯不算。"""
+    if any(is_denied(q.note) for q in results or []):
+        return True
     errors = sum(q.status == "error" for q in results or [])
     return errors > 0 and errors >= min(3, len(results))
 

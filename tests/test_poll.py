@@ -86,7 +86,28 @@ def test_collect():
         res = asyncio.run(real_collect(c, tdb, mar, "poll", args.fetch_day, {"m1": days, "m2": days}))
         FakeBrowser.fetch = real_fetch
         assert FakeBrowser.last.fetch_calls == ["m1"] and alerts.hotel_failed(res["m1"]) and alerts.hotel_failed(res["m2"])
+        # IHG：一間被擋（第 2 天 403）就停掉全部 IHG；已查到的照存，這次算失敗
+        ihg = [{"id": "i1", "name": "I1", "chain": "ihg", "code": "I1"},
+               {"id": "i2", "name": "I2", "chain": "ihg", "code": "I2"}]
+        c["browser"]["ihg_delay_seconds"] = [0, 0]
+        async def ihg_fetch(self, hotel, d):
+            self.fetch_calls.append(hotel["id"])
+            if len(self.fetch_calls) == 2:
+                return run.Quote(hotel["id"], d, None, None, "error", "IHG API HTTP 403: <HTML>Access Denied")
+            return run.Quote(hotel["id"], d, 100, "pts", "ok")
+        FakeBrowser.fetch = ihg_fetch
+        res = asyncio.run(real_collect(c, tdb, ihg, "poll", args.fetch_day, {"i1": days, "i2": days}))
+        assert FakeBrowser.last.fetch_calls == ["i1", "i1"], FakeBrowser.last.fetch_calls
+        assert alerts.hotel_failed(res["i1"]) and alerts.hotel_failed(res["i2"])
+        assert len(tdb.snapshots("i1", date.today().isoformat())) == 1
+        # 每天上限：今天已查 2 次（含被擋那次），上限 3 → 只再查 1 次
+        FakeBrowser.fetch = real_fetch
+        c["ihg_daily_cap"] = 3
+        res = asyncio.run(real_collect(c, tdb, ihg, "poll", args.fetch_day, {"i1": days, "i2": days}))
+        assert FakeBrowser.last.fetch_calls == ["i1"] and not alerts.hotel_failed(res["i1"]), FakeBrowser.last.fetch_calls
+        assert tdb.counter(f"calls:ihg:{date.today()}") == 3
     finally:
+        FakeBrowser.fetch = real_fetch
         run.BrowserFetcher = saved
 
 
@@ -243,6 +264,19 @@ price("b", 58000, "2026-01-02"); price("a", 58000, "2026-01-02")
 m6 = alerts.check_monitors(db6, c6, by_id)
 assert len(m6) == 1 and "58,000" in m6[0], m6
 assert not db6.was_sent(alerts.monitor_key(c6["monitors"][0])) and db6.was_sent(alerts.monitor_key(c6["monitors"][1]))
+
+# IHG 監控日期每 2 小時查一次（10 分鐘彈性）；log 每行加時間
+db9 = DB(str(tmp / "q.db"))
+assert run.ihg_watch_due({}, db9)
+db9.mark_sent("ihg-watch")
+assert not run.ihg_watch_due({}, db9, datetime.now() + timedelta(minutes=100))
+assert run.ihg_watch_due({}, db9, datetime.now() + timedelta(minutes=112))
+import io
+buf = io.StringIO()
+st = run._Stamped(buf)
+st.write("a\nb"); st.write("c\n"); st.write("d\n")
+lines = buf.getvalue().splitlines()
+assert [l[15:] for l in lines] == ["a", "bc", "d"] and lines[0][2] == "-", lines
 
 # 萬豪監控日期每 8 小時查官網：蓋過 ustatz 點數、留現金、ustatz 重讀不蓋回；失敗等下一輪，被封鎖等到下一個 07:00
 db7 = DB(str(tmp / "o.db"))

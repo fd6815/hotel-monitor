@@ -72,7 +72,8 @@ def build(db, cfg, hotels):
             "state": "done" if done else ("expired" if d < today else "watch"), "done_at": done,
         })
     data["requests_done"] = [k[4:] for k in db.recent_keys("req:")]
-    data["blocked"] = [{"chain": CHAIN_LABEL.get(c, c), "retry": t.strftime("%H:%M")} for c, t in blocked_chains(db).items()]
+    data["blocked"] = [{"chain": CHAIN_LABEL.get(c, c), "chain_id": c, "retry": t.strftime("%H:%M"),
+                        "until": t.isoformat(timespec="minutes")} for c, t in blocked_chains(db).items()]
     for r in db.recent_deals(30):
         data["deals"].append({"title": r["title_zh"] or r["title"], "summary": r["summary_zh"] or "",
                               "link": r["link"], "source": r["source"], "seen": r["seen_at"]})

@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS prices(
   PRIMARY KEY(hotel, stay_date, fetch_day)
 );
 CREATE TABLE IF NOT EXISTS alerts_sent(key TEXT PRIMARY KEY, sent_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS counters(key TEXT PRIMARY KEY, n INTEGER NOT NULL);   -- 每日查詢次數
 CREATE TABLE IF NOT EXISTS deals_seen(
   link TEXT PRIMARY KEY, title TEXT, source TEXT, published TEXT,
   matched INTEGER NOT NULL DEFAULT 0, seen_at TEXT NOT NULL
@@ -88,6 +89,15 @@ class DB:
     def recent_keys(self, prefix: str, limit=60):
         return [r["key"] for r in self.con.execute(
             "SELECT key FROM alerts_sent WHERE key LIKE ? ORDER BY sent_at DESC LIMIT ?", (prefix + "%", limit))]
+
+    # ---- 計數 ----
+    def counter(self, key: str) -> int:
+        r = self.con.execute("SELECT n FROM counters WHERE key=?", (key,)).fetchone()
+        return r["n"] if r else 0
+
+    def bump(self, key: str):
+        self.con.execute("INSERT INTO counters VALUES(?,1) ON CONFLICT(key) DO UPDATE SET n=n+1", (key,))
+        self.con.commit()
 
     # ---- 優惠 ----
     def deals_count(self) -> int:

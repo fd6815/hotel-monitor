@@ -6,7 +6,7 @@ GitHub：`fd6815/hotel-monitor`（公開）。手機網頁：https://fd6815.gith
 
 ## 架構
 - **電腦**（家用網路）：`run.py daily/watch/poll` 由工作排程器執行，用 Chrome（CDP）在官網頁面內呼叫 API → SQLite `data/hotelmon.db` → LINE 通知 → `dist/data.json` 用 GitHub contents API 傳到 `site/data.json`。
-- **手機網頁** `site/index.html`（手寫靜態頁）：讀 data.json。IHG 由網頁直接查官網 API，結果存 localStorage `hm-live`（只在該瀏覽器）；萬豪寫請求到 `watch/requests.json` 由電腦 poll 處理。寫入 GitHub 用手機 localStorage 的 `hm-token`。
+- **手機網頁** `site/index.html`（手寫靜態頁）：讀 data.json。IHG 由網頁直接查官網 API，結果存 localStorage `hm-live`（只在該瀏覽器）；查詢排隊一次一個、間隔 1–2 秒，每天最多 150 次（`hm-ihg-calls:<日>`），403／429 就停 2 小時（`hm-ihg-block`，data.json 的 `blocked[].until` 也算），被擋或達上限不轉請電腦查；「立即完整更新」只查目前打開的 IHG 飯店。萬豪寫請求到 `watch/requests.json` 由電腦 poll 處理。寫入 GitHub 用手機 localStorage 的 `hm-token`。
 - `watch/watchlist.json`：收藏與監控（手機讀寫，電腦每次執行前讀）。`site/hotels-marriott.json`：萬豪清單（directory.yml 每週重建）。`site/hotels-ihg.json`：IHG 清單（`[[代碼, 品牌, 城市]]`，daily 每 30 天由電腦 Chrome 讀官網 sitemap 更新，`run.py ihg-dir` 可手動更新）。pages.yml：`site/**` 變動時部署。
 - GitHub Actions 雲端 IP 被萬豪、IHG 官網擋，電腦和手機（非雲端）才能抓。
 
@@ -21,7 +21,9 @@ GitHub：`fd6815/hotel-monitor`（公開）。手機網頁：https://fd6815.gith
 | 名稱 | 時間 | 內容 | log |
 |---|---|---|---|
 | HotelMon Daily AM/PM | 07:13、19:13 | 週日第一次跑完整 60 天（`--full` 強制），其他時間等同 Watch | `data\daily.log` |
-| HotelMon Watch | :13、:43 | 只查監控日期；沒資料的新飯店抓 60 天 | `data\watch.log` |
+| HotelMon Watch | :13、:43 | 只查監控日期（IHG 每 `ihg_watch_minutes`＝120 分鐘才查，鍵 `ihg-watch`）；沒資料的新飯店抓 60 天 | `data\watch.log` |
+
+電腦查 IHG：間隔 `browser.ihg_delay_seconds`（3–6 秒），每天最多 `ihg_daily_cap`＝150 次（db `counters` 表 `calls:ihg:<日>`）。任一飯店被擋（`alerts.is_denied`：Access Denied／HTTP 403／429）就停掉這次同集團全部查詢，並算失敗、進入封鎖等待。pythonw 的 log 每行開頭有時間。
 | HotelMon Poll | 每 1 分 | 處理手機請求，沒請求就安靜結束 | `data\poll.log` |
 
 ## 主要檔案
