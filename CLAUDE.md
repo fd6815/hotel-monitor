@@ -20,7 +20,7 @@ GitHub：`fd6815/hotel-monitor`（公開）。手機網頁：https://fd6815.gith
 資料來源是第三方 ustatz.com（`hotelmon/ustatz.py`，一般 requests 可讀）：每間飯店每天 07:00 後讀一次，一次約 11 個月的點數與現金（含稅，IHG 是未稅），對方是預先抓好的，不一定最新。失敗照封鎖間隔重試。手機請求和切換月份都不觸發萬豪。監控日期另外每 8 小時用官網月曆 API 查一次（`update_marriott_official`，輪次從 07、15、23 點起算，同一輪每個日期只查一次；鍵 `maroff:<日>:<輪>:<飯店>:<日期>`）。失敗就傳 LINE、沿用 ustatz，下一輪再試；被封鎖則到下一個 07:00 前都不查（鍵 `maroff-blocked:<日>`，「日」從 07:00 算起）。只查點數，現金沿用 ustatz，`note` 記為「官網」。到價通知：官網來源通知一次就完成；ustatz 來源不結束監控，價格變了才再通知（鍵 `mon:...:<價格>`）。整段官網查價和逐日開頁的程式還留著（config `marriott_api: true` 才用）。
 
 ## 排程（pythonw 背景執行，需開機且登入，`data\run.lock` 防重複，90 分鐘逾時）
-`data.json` 沒實質變動就不上傳（`publish_data`，每天至少一次）。GitHub token 7 天內到期或失效會傳 LINE。
+`data.json` 沒實質變動就不上傳（`publish_data`），但每 3 小時（`heartbeat_hours`）至少傳一次當心跳；手機網頁超過 4 小時（`PC_STALE_H`）沒更新就把右上角改成紅字「電腦 X 小時沒更新」並跳提示。GitHub token 7 天內到期或失效會傳 LINE。
 | 名稱 | 時間 | 內容 | log |
 |---|---|---|---|
 | HotelMon Daily AM/PM | 07:13、19:13 | 週日第一次跑完整 60 天（`--full` 強制），其他時間等同 Watch | `data\daily.log` |

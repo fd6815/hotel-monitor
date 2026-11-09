@@ -45,12 +45,13 @@ def token_warning(cfg, db):
 
 
 def publish_data(cfg, file_path: Path):
-    """data.json 沒實質變動就不上傳，省 commit 與部署；每天至少傳一次。"""
+    """data.json 沒實質變動就不上傳，省 commit 與部署；每 heartbeat_hours（3）小時至少傳一次，手機據此判斷電腦有沒有在跑。"""
     data = json.loads(file_path.read_text(encoding="utf-8"))
     data.pop("updated", None)
     for h in data.get("hotels", []):
         h.pop("last", None)
-    sig = hashlib.sha256(f"{date.today()}{json.dumps(data, sort_keys=True)}".encode()).hexdigest()
+    slot = datetime.now().hour // int(cfg.get("heartbeat_hours", 3))
+    sig = hashlib.sha256(f"{date.today()}:{slot}{json.dumps(data, sort_keys=True)}".encode()).hexdigest()
     f = Path(cfg.get("data_dir", "data")) / "publish.sig"
     if f.exists() and f.read_text() == sig:
         print("[publish] 資料沒變，略過上傳")

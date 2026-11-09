@@ -944,7 +944,17 @@ function openSettings(msg){
 $("#btnSettings").onclick = () => openSettings();
 
 /* ---------- 啟動 ---------- */
-function renderAll(){ renderFavs(); renderCal(); renderMon(); renderDeals(); $("#upd").textContent = DATA.updated ? "更新 "+DATA.updated.slice(5) : ""; }
+/* 電腦每 3 小時至少上傳一次 data.json；超過 PC_STALE_H 小時沒更新＝電腦可能關機、睡眠或沒登入 */
+const PC_STALE_H = 4;
+function renderAll(){
+  renderFavs(); renderCal(); renderMon(); renderDeals();
+  const el = $("#upd"), t = DATA.updated ? new Date(DATA.updated.replace(" ","T")).getTime() : 0, h = (Date.now()-t)/3600000;
+  const stale = t && h > PC_STALE_H;
+  el.textContent = !t ? "" : stale ? `⚠ 電腦 ${h>=48 ? Math.floor(h/24)+" 天" : Math.floor(h)+" 小時"}沒更新` : "更新 "+DATA.updated.slice(5);
+  el.style.color = stale ? "var(--danger)" : "";
+  el.title = stale ? `最後更新 ${DATA.updated}，電腦可能關機、睡眠或沒登入，排程不會跑` : "";
+  if (stale && !renderAll.warned) { renderAll.warned = true; toast(`電腦已 ${Math.floor(h)} 小時沒更新房價，請確認電腦有開機並登入`); }
+}
 document.querySelectorAll("#pmode button").forEach(b=>b.onclick=()=>setPmode(b.dataset.m));
 document.querySelectorAll("#dirchain button").forEach(b=>{ b.onclick=()=>setDirchain(b.dataset.c); b.classList.toggle("on", b.dataset.c===DIRCHAIN); });
 let qTimer; $("#q").addEventListener("input", ()=>{ clearTimeout(qTimer); qTimer=setTimeout(doSearch, 250); });
