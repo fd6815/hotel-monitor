@@ -14,7 +14,7 @@ GitHub：`fd6815/hotel-monitor`（公開）。手機網頁：https://fd6815.gith
 每 30 分鐘隨 Watch 讀 RSS（config.yaml 的 `deals.feeds`）。網頁只留特價與優惠技巧；LINE 只傳 IHG／Avios／Alaska 點數特賣、bug 價、快速會籍匹配。翻譯用 Google 翻譯免費端點（非官方，失敗顯示原文）。
 
 ## 監控（watchlist.json `monitors`）
-單日 `{hotel, date, max_price}`：低於門檻通知一次就完成（萬豪 ustatz 來源例外，價格變了再通知）。區間多一個 `end`（含，最長 92 天，`watchlist.mon_dates`）：期間內每個低於門檻的日期各通知一次（鍵 `mon:<飯店>:<起>~<迄>:<門檻>:<日期>`），到期才結束；查價範圍、萬豪官網、手機開頁都會展開成每一天。data.json 的 monitors 有 `end`、`cur_date`（區間最低那天）、`src`（官網／ustatz）、`t`（查詢時間）、`hits`。手機「我的監控」可新增區間監控、點一筆改門檻。網頁可加到主畫面（`site/manifest.webmanifest`，圖示由 `scripts/make_icons.py` 產生）。
+單日 `{hotel, date, max_price}`：低於門檻通知一次就完成（萬豪 ustatz 來源例外，價格變了再通知）。區間多一個 `end`（含，最長 92 天，`watchlist.mon_dates`）：期間內每個低於門檻的日期各通知一次（鍵 `mon:<飯店>:<起>~<迄>:<門檻>:<日期>`），到期才結束；查價範圍、萬豪官網、手機開頁都會展開成每一天。`kind: "cash"` 是現金門檻（台幣，`alerts.mon_value` 用 fx 換算；萬豪含稅、來自 ustatz，所以不觸發官網、價格變了再通知；IHG 未稅，現金監控日期在 collect 逐日查最近 `IHG_CASH_MAX`＝10 天，其餘用月曆）。手機日曆點日期時，依上方點數／現金切換決定加哪一種。data.json 的 monitors 有 `end`、`cur_date`（區間最低那天）、`src`（官網／ustatz）、`t`（查詢時間）、`hits`。手機「我的監控」可新增區間監控、點一筆改門檻。網頁可加到主畫面（`site/manifest.webmanifest`，圖示由 `scripts/make_icons.py` 產生）。
 
 ## 一年內新低通知（`alerts.check_year_low`）
 收藏飯店（點數模式）未來 365 天的最低點數存在 db `counters` 表 `low:<飯店>`。資料要涵蓋到 300 天後才算；第一次只記錄不通知；之後比紀錄更低才傳 LINE「一年內新低」並更新紀錄（同價、最低那天被訂走都不通知）。daily／watch／poll 每次都檢查。
@@ -50,5 +50,4 @@ GitHub：`fd6815/hotel-monitor`（公開）。手機網頁：https://fd6815.gith
 6. 觀察萬豪官網 2026-11-10～11-12（不開 VPN）有沒有被擋（看 `maroff-blocked:` 鍵或 daily/watch log）；都沒被擋就把官網監控從每 8 小時改成每 4 小時（使用者已同意）。
 5. 優惠來源「里程家」找不到網站，等使用者提供網址。
 2. 2026-11-02 00:22 的 poll 查台北洲際時瀏覽器中途關閉（Target page, context or browser has been closed），原因未查明，再發生要查。
-3. 監控門檻目前只有點數，可考慮加現金門檻。
 4. 目前收藏：名古屋萬豪 NGODT、台北洲際 TPEPI；監控：名古屋萬豪 2026-11-28 < 60000、台北洲際 2026-12-06 < 64000。

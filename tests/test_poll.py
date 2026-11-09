@@ -540,4 +540,40 @@ rep = run.report.build(dbr, {"monitors": [rm]}, [hr])["monitors"][0]
 assert (rep["cur"], rep["cur_date"], rep["end"], rep["src"]) == (58000, (t1 + timedelta(days=3)).isoformat(), rm["end"], "官網"), rep
 assert rep["state"] == "watch" and len(rep["hits"]) == 2
 
+# 現金門檻：看同日最低現金換台幣；萬豪現金來自 ustatz → 價格變了才再通知；官網只查點數監控
+cm = {"hotel": "R", "date": (t1 + timedelta(days=1)).isoformat(), "max_price": 3000, "kind": "cash"}
+assert _normalize({"hotels": [{"id": "R", "chain": "ihg", "code": "RRR"}], "monitors": [cm]})["monitors"] == [cm]
+assert alerts.monitor_key(cm).endswith(":cash")
+ccfg = {"monitors": [cm], "data_dir": str(tmp)}
+(tmp / "fx.json").write_text('{"TWD": 1, "JPY": 5}', encoding="utf-8")
+dbr.save_quote(run.Quote("R", t1 + timedelta(days=1), None, None, "sold_out", cash=16000, cash_unit="JPY"), "2000-01-01")
+assert alerts.check_monitors(dbr, ccfg, {"R": hr}) == []   # NT$ 3,200 未低於 3,000
+dbr.save_quote(run.Quote("R", t1 + timedelta(days=1), None, None, "sold_out", cash=14000, cash_unit="JPY"), "2000-01-02")
+mc = alerts.check_monitors(dbr, ccfg, {"R": hr})
+assert len(mc) == 1 and "現金監控達標" in mc[0] and "NT$ 2,800（JPY 14,000）" in mc[0] and "NT$ 3,000" in mc[0], mc
+assert alerts.check_monitors(dbr, ccfg, {"R": hr}) == [] and dbr.was_sent(alerts.monitor_key(cm))
+repc = run.report.build(dbr, ccfg, [hr])["monitors"][0]
+assert (repc["kind"], repc["cur"], repc["unit"]) == ("cash", 2800, "NT$"), repc
+hm = {"id": "M", "name": "萬豪", "chain": "marriott", "code": "MMM"}
+cmm = {"hotel": "M", "date": cm["date"], "max_price": 3000, "kind": "cash"}
+dbm = DB(str(tmp / "cashm.db"))
+dbm.save_quote(run.Quote("M", t1 + timedelta(days=1), 50000, "pts", "ok", cash=14000, cash_unit="JPY"), "2000-01-01")
+mm = alerts.check_monitors(dbm, {"monitors": [cmm], "data_dir": str(tmp)}, {"M": hm})
+assert len(mm) == 1 and "ustatz" in mm[0] and not dbm.was_sent(alerts.monitor_key(cmm)), mm
+assert run.cash_dates({"monitors": [cm, rm]}, "R") == {t1 + timedelta(days=1)}
+# IHG 現金門檻的日期逐日查（有現金），其他多天用月曆
+ranges.clear()
+class CashCal(FakeBrowser):
+    def __init__(self, cfg): super().__init__(cfg); self.cal, self.day = [], []; CashCal.last = self
+    async def ihg_range(self, hotel, dates):
+        self.cal.append(sorted(dates)); return [run.Quote(hotel["id"], d, 80, "pts", "ok") for d in dates], 1
+    async def fetch(self, hotel, d):
+        self.day.append(d); return run.Quote(hotel["id"], d, 80, "pts", "ok", cash=9000, cash_unit="TWD")
+run.BrowserFetcher = CashCal
+dbx = DB(str(tmp / "cashx.db"))
+many = {t1 + timedelta(days=i) for i in range(10)}
+asyncio.run(real_collect({"monitors": [cm], "browser": {"ihg_delay_seconds": [0, 0]}}, dbx, [hr], "poll", args.fetch_day, {"R": many}))
+assert CashCal.last.day == [t1 + timedelta(days=1)] and len(CashCal.last.cal[0]) == 9, (CashCal.last.day, CashCal.last.cal)
+run.BrowserFetcher = real_browser
+
 print("poll 測試全部通過")

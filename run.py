@@ -67,6 +67,12 @@ from hotelmon.fetchers import BrowserFetcher, DemoFetcher, Quote
 
 IHG_RANGE_MIN = 3   # IHG 超過這麼多天就改用月曆 API
 YEAR_DAYS = 365     # IHG 每天查未來一年
+IHG_CASH_MAX = 10   # IHG 現金門檻監控每次最多逐日查幾天（月曆沒有現金）
+
+
+def cash_dates(cfg, hotel_id):
+    return {d for m in cfg.get("monitors", []) if m["hotel"] == hotel_id and m.get("kind") == "cash"
+            for d in mon_dates(m)}
 
 
 def load(path):
@@ -127,8 +133,8 @@ async def update_marriott_official(cfg, db, hotels, fetch_day, now=None):
         return []
     targets = {}
     for m in cfg.get("monitors", []):
-        if not any(h["id"] == m["hotel"] and h["chain"] == "marriott" for h in hotels):
-            continue
+        if m.get("kind") == "cash" or not any(h["id"] == m["hotel"] and h["chain"] == "marriott" for h in hotels):
+            continue   # 官網只查點數；現金門檻用 ustatz 的現金
         for dd in mon_dates(m, now.date()):
             key = f"maroff:{shifted.date()}:{shifted.hour // 8}:{m['hotel']}:{dd}"
             if not db.was_sent(key):
@@ -208,15 +214,18 @@ async def collect(cfg, db, hotels, mode, fetch_day, targets=None):
                     continue
                 counted = h["chain"] == "ihg"
                 calls_key = f"calls:ihg:{date.today()}"
-                # IHG 多天：月曆 API 一次查一個月（只有點數，現金沿用前次）；監控日期等少數日期仍逐日查（有現金）
-                if counted and len(dates) > IHG_RANGE_MIN and hasattr(f, "ihg_range") \
-                        and h.get("mode", "points") == "points" and not h.get("url_template"):
+                # IHG 多天：月曆 API 一次查一個月（只有點數，現金沿用前次）；監控日期等少數日期仍逐日查（有現金）。
+                # 現金門檻監控的日期（最近 IHG_CASH_MAX 天）逐日查才有現金
+                cash_ds = cash_dates(cfg, h["id"])
+                per_day = [d for d in dates if d in cash_ds][:IHG_CASH_MAX]
+                cal = [d for d in dates if d not in per_day]
+                if counted and len(cal) > IHG_RANGE_MIN and hasattr(f, "ihg_range")                         and h.get("mode", "points") == "points" and not h.get("url_template"):
                     if db.counter(calls_key) >= cap:
                         print(f"  IHG 今天已查 {cap} 次，達上限，其餘日期明天再查")
                         results[h["id"]] = []
                         continue
                     try:
-                        qs, n = await f.ihg_range(h, dates)
+                        qs, n = await f.ihg_range(h, cal)
                     except Exception as e:  # noqa: BLE001
                         print(f"  [ihg] 月曆 API 失敗：{e!s:.120}")
                         qs, n = None, 1
@@ -234,9 +243,12 @@ async def collect(cfg, db, hotels, mode, fetch_day, targets=None):
                                 q.cash, q.cash_unit = prev[0]["cash"], prev[0]["cash_unit"]
                             db.save_quote(q, fetch_day)
                             print(f"  {h['name']} {q.stay_date} {q.status} {q.price or ''} [月曆]")
-                        results[h["id"]] = qs
+                        res = list(qs)
+                        dates = per_day
                         await asyncio.sleep(random.uniform(ilo, ihi))
-                        continue
+                        if not dates:
+                            results[h["id"]] = res
+                            continue
                 for i, d in enumerate(dates, 1):
                     if counted and db.counter(calls_key) >= cap:
                         print(f"  IHG 今天已查 {cap} 次，達上限，其餘日期明天再查")

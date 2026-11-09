@@ -4,7 +4,7 @@ import statistics
 from datetime import date
 from pathlib import Path
 
-from .alerts import OFFICIAL, blocked_chains, mon_rows, monitor_key
+from .alerts import OFFICIAL, blocked_chains, mon_rows, mon_value, monitor_key
 from .db import now
 from .fetchers import build_url
 from . import fx
@@ -63,21 +63,23 @@ def build(db, cfg, hotels):
         d = str(m["date"])
         h = by_id.get(m["hotel"], {"name": m["hotel"], "chain": ""})
         rows = mon_rows(db, m)
-        oks = {k: r for k, r in rows.items() if r["status"] == "ok" and r["price"] is not None}
+        cash = m.get("kind") == "cash"
+        vals = {k: v for k, r in rows.items() if (v := mon_value(m, r, rt)) is not None}
         # 區間取最低價那天；單日就是那天
-        cd = min(oks, key=lambda k: (oks[k]["price"], k)) if oks else (min(rows) if rows else None)
+        cd = min(vals, key=lambda k: (vals[k], k)) if vals else (min(rows) if rows else None)
         cur = rows.get(cd) if cd else None
         done = db.was_sent(monitor_key(m))
         last = m.get("end") or d
         src = None
         if cur:
-            src = OFFICIAL if cur["note"] == OFFICIAL or h.get("chain") != "marriott" else "ustatz"
+            src = OFFICIAL if (cur["note"] == OFFICIAL and not cash) or h.get("chain") != "marriott" else "ustatz"
         data["monitors"].append({
-            "date": d, "end": m.get("end"), "hotel": m["hotel"], "name": h["name"], "max": m["max_price"],
-            "cur": cur["price"] if cur else None, "s": cur["status"] if cur else None,
-            "unit": cur["unit"] if cur else None, "cur_date": cd, "src": src,
+            "date": d, "end": m.get("end"), "kind": m.get("kind", "points"),
+            "hotel": m["hotel"], "name": h["name"], "max": m["max_price"],
+            "cur": vals.get(cd) if cur else None, "s": cur["status"] if cur else None,
+            "unit": ("NT$" if cash else cur["unit"]) if cur else None, "cur_date": cd, "src": src,
             "t": cur["fetched_at"] if cur else None, "key": monitor_key(m),
-            "hits": sorted(k for k, r in oks.items() if r["price"] < m["max_price"]),
+            "hits": sorted(k for k, v in vals.items() if v < m["max_price"]),
             "state": "done" if done else ("expired" if last < today else "watch"), "done_at": done,
         })
     data["requests_done"] = [k[4:] for k in db.recent_keys("req:")]

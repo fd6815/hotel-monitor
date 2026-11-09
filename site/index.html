@@ -353,7 +353,7 @@ const dataHotel = id => DATA.hotels.find(h=>h.id===id);
 const hotelName = id => (wlHotel(id)||dataHotel(id)||{name:id}).name;
 /* 監控：單日 {hotel,date,max_price}，區間多一個 end（含），最長 MAX_RANGE_DAYS 天 */
 const MAX_RANGE_DAYS = 92;
-const sameMon = (a,b) => a.hotel===b.hotel && a.date===b.date && (a.end||"")===(b.end||"");
+const sameMon = (a,b) => a.hotel===b.hotel && a.date===b.date && (a.end||"")===(b.end||"") && (a.kind||"points")===(b.kind||"points");
 function monDates(m){ const ds=[], end=m.end||m.date; for (let d=m.date, i=0; d<=end && i<MAX_RANGE_DAYS; d=addDay(d,1), i++) if (d>=todayStr) ds.push(d); return ds; }
 function monState(m){
   const dm = DATA.monitors.find(x=>sameMon(x,m) && x.max===m.max_price);
@@ -868,7 +868,8 @@ function openDay(k){
   selDay = k; renderCal();
   const wh = wlHotel(curHotel)||{}, h = dataHotel(curHotel), x = h && h.days[k];
   const wd = "日一二三四五六"[new Date(k+"T00:00").getDay()];
-  const mon = WL.monitors.find(m=>m.hotel===curHotel && m.date===k && !m.end);
+  const kind = PMODE==="cash" ? "cash" : "points", isK = m => m.hotel===curHotel && m.date===k && !m.end && (m.kind||"points")===kind;
+  const mon = WL.monitors.find(isK);
   let price = '<span class="muted">尚無資料</span>', change = "";
   if (x){
     if (x.s==="sold_out") price = `<span class="sold">搶空</span>`;
@@ -881,7 +882,7 @@ function openDay(k){
     else if (x.delta<0) change = `<span class="down">較前次降 ${(-x.delta).toLocaleString()}</span>`;
   }
   const hist = x ? x.h.slice(-6).reverse().map(r=>`${r[0].slice(5)}　${r[2]==="sold_out"?"搶空":fmt(r[1],x.u)}`).join("<br>") : "";
-  const def = mon ? mon.max_price : (x && x.s==="ok" && x.p ? x.p : (minOf(h)||{}).min || 50000);
+  const def = mon ? mon.max_price : kind==="cash" ? (x && x.c ? Math.round(x.c/1000)*1000 : 8000) : (x && x.s==="ok" && x.p ? x.p : (minOf(h)||{}).min || 50000);
   openSheet(`
     <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
       <div><h3>${esc(wh.name||h?.name||"")}</h3><div class="hist">${k}（${wd}）入住 1 晚</div></div>
@@ -894,8 +895,8 @@ function openDay(k){
     </dl>` : ""}
     ${x ? spark(x.h) : ""}
     <div class="hist">${hist}</div>
-    <div class="sec-title" style="margin-top:16px">${mon ? "監控中" : "加入監控"}<small>低於門檻時 LINE 通知</small></div>
-    <div class="field"><label for="thr">門檻（低於）</label><input id="thr" type="number" inputmode="numeric" step="1000" value="${def}"></div>
+    <div class="sec-title" style="margin-top:16px">${mon ? "監控中" : "加入監控"}<small>${kind==="cash" ? "現金（台幣）" : "點數"}低於門檻時 LINE 通知；切換上方點數／現金可改種類</small></div>
+    <div class="field"><label for="thr">${kind==="cash" ? "現金門檻 NT$（低於）" : "點數門檻（低於）"}</label><input id="thr" type="number" inputmode="numeric" step="1000" value="${def}"></div>
     <div class="btns">
       ${mon ? `<button class="btn danger" id="monDel">刪除監控</button><button class="btn pri" id="monSave">更新門檻</button>`
             : `<button class="btn pri" id="monSave">加入監控</button>`}
@@ -905,26 +906,36 @@ function openDay(k){
   $("#monSave").onclick = () => {
     const v = parseInt($("#thr").value, 10);
     if (!(v>0)) { toast("請輸入門檻"); return; }
-    saveWatchlist(w=>{ w.monitors = w.monitors.filter(m=>!(m.hotel===curHotel && m.date===k && !m.end)); w.monitors.push({hotel:curHotel, date:k, max_price:v}); },
+    saveWatchlist(w=>{ w.monitors = w.monitors.filter(m=>!isK(m)); w.monitors.push(kind==="cash" ? {hotel:curHotel, date:k, max_price:v, kind} : {hotel:curHotel, date:k, max_price:v}); },
       `監控 ${hotelName(curHotel)} ${k} < ${v}`).then(ok=>{ if(ok) closeSheet(); });
   };
-  if ($("#monDel")) $("#monDel").onclick = () => saveWatchlist(w=>{ w.monitors = w.monitors.filter(m=>!(m.hotel===curHotel && m.date===k && !m.end)); },
+  if ($("#monDel")) $("#monDel").onclick = () => saveWatchlist(w=>{ w.monitors = w.monitors.filter(m=>!isK(m)); },
       `刪除監控 ${hotelName(curHotel)} ${k}`).then(ok=>{ if(ok) closeSheet(); });
 }
 
 /* ---------- 監控 ---------- */
+/* 監控比較用的值：點數門檻看點數（有房才算）；現金門檻看同日最低現金換台幣（萬豪含稅、IHG 未稅） */
+const isCashMon = m => m.kind==="cash";
+function monVal(m, x){
+  if (!x) return null;
+  if (isCashMon(m)) return x.c ?? null;
+  return x.s==="ok" && x.p!=null ? x.p : null;
+}
+const monFmt = (m, v, x) => isCashMon(m) ? twd(v) : fmt(v, (x && x.u) || "pts");
+const thrFmt = m => isCashMon(m) ? twd(m.max_price) : m.max_price.toLocaleString();
 /* 監控目前狀況：區間取最低價那天；IHG 用網頁直接查的結果（較新）；來源與查詢時間 */
 function monNow(m, dm){
   const h = dataHotel(m.hotel), ds = monDates(m);
   let best = null;
-  for (const d of ds){ const x = h && h.days[d]; if (x && x.s==="ok" && x.p!=null && (!best || x.p<best.x.p)) best = {d, x}; }
+  for (const d of ds){ const x = h && h.days[d], v = monVal(m, x); if (v!=null && (!best || v<best.v)) best = {d, x, v}; }
   const anyD = ds.find(d=>h && h.days[d]);
   const d = best ? best.d : (dm && dm.cur_date) || anyD || ds[0], x = best ? best.x : (h && d && h.days[d]) || null;
   const live = LIVE[m.hotel] && d && LIVE[m.hotel][d];
-  const src = isLive(m.hotel) ? (live ? "手機查" : "官網") : ((x && x.n==="官網") || (dm && dm.src==="官網")) ? "官網" : isMarriott(m.hotel) ? "ustatz" : "官網";
+  const src = isLive(m.hotel) ? (live ? "手機查" : "官網")
+    : isMarriott(m.hotel) ? (!isCashMon(m) && ((x && x.n==="官網") || (dm && dm.src==="官網")) ? "官網" : "ustatz") : "官網";
   const t = live ? stamp(live.t) : (dm && dm.t) || (h && h.last) || "";
-  const hits = ds.filter(k=>{ const y = h && h.days[k]; return y && y.s==="ok" && y.p!=null && y.p<m.max_price; });
-  return {d, x, src, t, hits, n: ds.length};
+  const hits = ds.filter(k=>{ const v = monVal(m, h && h.days[k]); return v!=null && v<m.max_price; });
+  return {d, x, v: best ? best.v : null, src, t, hits, n: ds.length};
 }
 function renderMon(){
   const st = {watch:"監控中", pending:"等待抓價", done:"已完成", expired:"已過期"};
@@ -932,21 +943,20 @@ function renderMon(){
   $("#monAdd").onclick = () => editMon(null);
   if (!list.length){ $("#mon").innerHTML = '<div class="empty-note">還沒有監控。到「每日房價」點日期新增單日監控，或按上方新增區間監控</div>'; return; }
   $("#mon").innerHTML = list.map((m,i)=>{
-    const {state, dm} = monState(m), r = monNow(m, dm), x = r.x;
+    const {state, dm} = monState(m), r = monNow(m, dm), x = r.x, cash = isCashMon(m);
     const when = m.end ? `${m.date.slice(5)}～${m.end.slice(5)}` : m.date.slice(5);
     let cur = "尚無資料", gap = "", cls = "far";
-    if (x) {
-      if (x.s==="ok" && x.p!=null) {
-        cur = fmt(x.p, x.u) + (m.end ? `（${r.d.slice(5)}）` : "");
-        const diff = x.p - m.max_price;
-        if (diff < 0) { gap = m.end ? `${r.hits.length} 天低於門檻` : `低於門檻 ${(-diff).toLocaleString()} 點`; cls = "hit"; }
-        else gap = `還差 ${diff.toLocaleString()} 點`;
-      } else cur = m.end ? "全部搶空" : "搶空";
-    }
+    if (r.v!=null) {
+      cur = monFmt(m, r.v, x) + (m.end ? `（${r.d.slice(5)}）` : "");
+      const diff = r.v - m.max_price, u = n => cash ? twd(n) : n.toLocaleString()+" 點";
+      if (diff < 0) { gap = m.end ? `${r.hits.length} 天低於門檻` : `低於門檻 ${u(-diff)}`; cls = "hit"; }
+      else gap = `還差 ${u(diff)}`;
+    } else if (x) cur = cash ? "沒有現金價" : (m.end ? "全部搶空" : "搶空");
     const meta = x ? `${r.src}${r.t ? " · "+esc(r.t.slice(5)) : ""}` : "";
+    const tags = [m.end ? `區間 ${r.n} 天` : "", cash ? "現金" : ""].filter(Boolean).join("・");
     return `<div class="row"><div class="main" data-edit="${i}" style="cursor:pointer">
-        <div class="t">${when}　${esc(hotelName(m.hotel))}${m.end?` <span class="muted" style="font-weight:400;font-size:12px">區間 ${r.n} 天</span>`:""}</div>
-        <div class="s">門檻 &lt; ${m.max_price.toLocaleString()}　目前 ${cur}</div>
+        <div class="t">${when}　${esc(hotelName(m.hotel))}${tags?` <span class="muted" style="font-weight:400;font-size:12px">${tags}</span>`:""}</div>
+        <div class="s">門檻 &lt; ${thrFmt(m)}　目前 ${cur}</div>
         ${meta || (dm&&dm.done_at) ? `<div class="s">${meta}${dm&&dm.done_at?"　完成 "+esc(dm.done_at.slice(5)):""}</div>` : ""}
         ${gap && state!=="expired" && state!=="done" ? `<div class="mon-gap ${cls}">${gap}</div>` : ""}</div>
       <span class="tag ${state}">${st[state]}</span>
@@ -955,18 +965,20 @@ function renderMon(){
   $("#mon").querySelectorAll("[data-edit]").forEach(e=>e.onclick=()=>editMon(list[+e.dataset.edit]));
   $("#mon").querySelectorAll("[data-mdel]").forEach(e=>e.onclick=()=>{
     const m = list[+e.dataset.mdel], when = m.end ? `${m.date}～${m.end}` : m.date;
-    if (!confirm(`刪除 ${when} ${hotelName(m.hotel)} 的監控？`)) return;
+    if (!confirm(`刪除 ${when} ${hotelName(m.hotel)} 的${isCashMon(m)?"現金":""}監控？`)) return;
     saveWatchlist(w=>{ w.monitors = w.monitors.filter(x=>!sameMon(x,m)); }, `刪除監控 ${hotelName(m.hotel)} ${when}`);
   });
 }
-/* 新增或修改監控（m=null 為新增區間監控） */
+/* 新增或修改監控（m=null 為新增區間監控）；門檻種類：點數或現金（台幣） */
 function editMon(m){
   const hs = allHotels().filter(h=>(h.mode||"points")==="points");
   if (!m && !hs.length) { toast("請先收藏飯店"); return; }
   const isRange = !m || !!m.end, hid = m ? m.hotel : (curHotel && hs.some(h=>h.id===curHotel) ? curHotel : hs[0].id);
   const r = m ? monNow(m, monState(m).dm) : null;
   const from = m ? m.date : addDay(todayStr, 1), to = m ? (m.end||m.date) : addDay(todayStr, 30);
-  const def = m ? m.max_price : ((minOf(dataHotel(hid))||{}).min || 50000);
+  const kind0 = m ? (m.kind||"points") : (PMODE==="cash" ? "cash" : "points");
+  const defFor = k => m && (m.kind||"points")===k ? m.max_price
+    : k==="cash" ? Math.round(((minCash(dataHotel(hid))||8000))/1000)*1000 : ((minOf(dataHotel(hid))||{}).min || 50000);
   const opts = (m ? [{id:m.hotel}] : hs).map(h=>`<option value="${esc(h.id)}" ${h.id===hid?"selected":""}>${esc(hotelName(h.id))}</option>`).join("");
   openSheet(`<h3>${m ? (isRange ? "區間監控" : "單日監控") : "新增區間監控"}</h3>
     <div class="hint">${isRange ? `期間內任一天低於門檻就傳 LINE，每天只通知一次，到期才結束。最長 ${MAX_RANGE_DAYS} 天。` : "低於門檻時傳 LINE 通知一次，並標為已完成。"}</div>
@@ -974,10 +986,21 @@ function editMon(m){
     ${isRange ? `<div class="field"><label for="mFrom">從</label><input id="mFrom" type="date" min="${todayStr}" value="${from}"></div>
     <div class="field"><label for="mTo">到</label><input id="mTo" type="date" min="${todayStr}" value="${to}"></div>`
       : `<div class="field"><label>日期</label><b>${m.date}</b></div>`}
-    <div class="field"><label for="mThr">門檻（低於）</label><input id="mThr" type="number" inputmode="numeric" step="1000" value="${def}"></div>
-    ${r && r.x ? `<div class="hint">目前 ${r.x.s==="ok" ? fmt(r.x.p, r.x.u)+(isRange?`（${r.d}）`:"") : "搶空"} · ${r.src}${r.t?" · "+esc(r.t):""}</div>` : ""}
+    <div class="field"><label for="mKind">門檻種類</label><select id="mKind">
+      <option value="points" ${kind0==="points"?"selected":""}>點數</option><option value="cash" ${kind0==="cash"?"selected":""}>現金（台幣）</option></select></div>
+    <div class="field"><label for="mThr" id="mThrL">門檻（低於）</label><input id="mThr" type="number" inputmode="numeric" step="1000" value="${defFor(kind0)}"></div>
+    <div class="hint" id="mKindHint"></div>
+    ${r && r.x ? `<div class="hint">目前 ${r.v!=null ? monFmt(m, r.v, r.x)+(isRange?`（${r.d}）`:"") : isCashMon(m) ? "沒有現金價" : "搶空"} · ${r.src}${r.t?" · "+esc(r.t):""}</div>` : ""}
     <div class="btns">${m ? '<button class="btn danger" id="mDel">刪除</button>' : ""}<button class="btn pri" id="mSave">${m ? "儲存" : "加入監控"}</button></div>
     <div class="btns">${m ? '<button class="btn" id="mCal">看日曆</button>' : ""}<button class="btn" id="sheetClose">關閉</button></div>`);
+  const kindHint = () => {
+    const c = $("#mKind").value==="cash", hh = $("#mHotel").value;
+    $("#mThrL").textContent = c ? "門檻 NT$（低於）" : "門檻點數（低於）";
+    $("#mKindHint").textContent = c ? (isMarriott(hh) ? "萬豪現金來自 ustatz（含稅），每天更新一次。" : "IHG 現金為未稅價；區間監控每次最多逐日查最近 10 天的現金。") : "";
+  };
+  kindHint();
+  $("#mKind").onchange = () => { $("#mThr").value = defFor($("#mKind").value); kindHint(); };
+  $("#mHotel").onchange = kindHint;
   $("#sheetClose").onclick = closeSheet;
   if ($("#mCal")) $("#mCal").onclick = () => { curHotel = m.hotel; LS.set("hm-hotel", curHotel); curMonth = ((r && r.d) || m.date).slice(0,7); show("cal"); renderCal(); };
   if ($("#mDel")) $("#mDel").onclick = () => saveWatchlist(w=>{ w.monitors = w.monitors.filter(x=>!sameMon(x,m)); },
@@ -985,7 +1008,7 @@ function editMon(m){
   $("#mSave").onclick = () => {
     const v = parseInt($("#mThr").value, 10);
     if (!(v>0)) { toast("請輸入門檻"); return; }
-    const h = $("#mHotel").value;
+    const h = $("#mHotel").value, kind = $("#mKind").value;
     let nm;
     if (isRange) {
       const a = $("#mFrom").value, b = $("#mTo").value;
@@ -994,10 +1017,16 @@ function editMon(m){
       if ((new Date(b) - new Date(a)) / 86400000 + 1 > MAX_RANGE_DAYS) { toast(`區間最長 ${MAX_RANGE_DAYS} 天`); return; }
       nm = a===b ? {hotel:h, date:a, max_price:v} : {hotel:h, date:a, end:b, max_price:v};
     } else nm = {hotel:h, date:m.date, max_price:v};
+    if (kind==="cash") nm.kind = "cash";
     const when = nm.end ? `${nm.date}～${nm.end}` : nm.date;
     saveWatchlist(w=>{ w.monitors = w.monitors.filter(x=>!(m && sameMon(x,m)) && !sameMon(x,nm)); w.monitors.push(nm); },
-      `監控 ${hotelName(h)} ${when} < ${v}`).then(ok=>{ if (ok) closeSheet(); });
+      `監控 ${hotelName(h)} ${when} ${kind==="cash"?"現金 < NT$ ":"< "}${v}`).then(ok=>{ if (ok) closeSheet(); });
   };
+}
+function minCash(h){
+  if (!h) return null;
+  const v = Object.entries(h.days||{}).filter(([d,x])=>d>=todayStr && x.c!=null).map(([,x])=>x.c);
+  return v.length ? Math.min(...v) : null;
 }
 
 /* ---------- 優惠 ---------- */

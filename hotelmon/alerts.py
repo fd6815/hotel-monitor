@@ -6,7 +6,9 @@
 """
 from datetime import date, datetime, timedelta
 
+from . import fx
 from .fetchers import build_url
+from .fx import to_twd
 
 BLOCK_MINUTES = 30      # 被官網擋之後，最短隔多久再重試
 BLOCK_MAX_MINUTES = 360 # 一直被擋就把間隔拉長（等於已被擋多久），最長 6 小時，避免重試延長封鎖
@@ -67,7 +69,22 @@ def fmt(price, unit):
 
 def monitor_key(m):
     end = f"~{m['end']}" if m.get("end") else ""
-    return f"mon:{m['hotel']}:{m['date']}{end}:{m['max_price']}"
+    kind = ":cash" if m.get("kind") == "cash" else ""
+    return f"mon:{m['hotel']}:{m['date']}{end}:{m['max_price']}{kind}"
+
+
+def mon_value(m, row, rt):
+    """監控比較用的值：點數門檻看點數；現金門檻看同日最低現金換台幣（萬豪含稅、IHG 未稅）。"""
+    if m.get("kind") == "cash":
+        c = row["cash"] if "cash" in row.keys() else None
+        return to_twd(c, row["cash_unit"], rt) if c else None
+    return row["price"] if row["status"] == "ok" else None
+
+
+def mon_fmt(m, row, v):
+    if m.get("kind") == "cash":
+        return f"NT$ {v:,}（{row['cash_unit']} {row['cash']:,}）"
+    return fmt(v, row["unit"])
 
 
 def mon_rows(db, m, today=None) -> dict:
@@ -87,36 +104,44 @@ def _third_party(cfg, h, row) -> bool:
 
 
 def check_monitors(db, cfg, hotels_by_id) -> list[str]:
-    """單日：低於門檻通知一次並完成。區間：每個低於門檻的日期各通知一次，區間結束前持續監控。"""
+    """單日：低於門檻通知一次並完成。區間：每個低於門檻的日期各通知一次，區間結束前持續監控。
+    kind=cash 是現金門檻（台幣），萬豪現金都來自 ustatz。"""
     msgs = []
+    rt = None
     for m in cfg.get("monitors", []):
         h = hotels_by_id.get(m["hotel"])
         if not h or db.was_sent(monitor_key(m)):
             continue
+        cash = m.get("kind") == "cash"
+        if cash and rt is None:
+            rt = fx.rates(cfg)
         hits = []
         for d, cur in mon_rows(db, m).items():
-            if cur["status"] != "ok" or cur["price"] is None or cur["price"] >= m["max_price"]:
+            v = mon_value(m, cur, rt)
+            if v is None or v >= m["max_price"]:
                 continue
-            third = _third_party(cfg, h, cur)
-            key = monitor_key(m) + (f":{d}" if m.get("end") else "") + (f":{cur['price']}" if third else "")
+            third = h["chain"] == "marriott" and not cfg.get("marriott_api") if cash else _third_party(cfg, h, cur)
+            key = monitor_key(m) + (f":{d}" if m.get("end") else "") + (f":{v}" if third else "")
             if not db.was_sent(key):
                 db.mark_sent(key)
-                hits.append((d, cur, third))
+                hits.append((d, cur, third, v))
         if not hits:
             continue
         url = build_url(h, date.fromisoformat(hits[0][0]), cfg.get("adults", 2)) if h["chain"] != "demo" else ""
         note = "\n資料來自 ustatz，可能不是最新，請到官網確認" if any(x[2] for x in hits) else ""
+        thr = f"NT$ {m['max_price']:,}" if cash else f"{m['max_price']:,}"
+        what = "現金" if cash else ""
         if m.get("end"):
-            lines = "\n".join(f"{d} {fmt(c['price'], c['unit'])}" for d, c, _ in hits[:15])
+            lines = "\n".join(f"{d} {mon_fmt(m, c, v)}" for d, c, _, v in hits[:15])
             more = f"\n…共 {len(hits)} 天" if len(hits) > 15 else ""
-            msgs.append(f"【區間監控達標】{h['name']} {m['date']}～{m['end']}（門檻 < {m['max_price']:,}）\n"
+            msgs.append(f"【區間{what}監控達標】{h['name']} {m['date']}～{m['end']}（門檻 < {thr}）\n"
                         f"{lines}{more}{note}\n{url}".strip())
         else:
-            d, cur, third = hits[0]
+            d, cur, third, v = hits[0]
             if not third:
                 db.mark_sent(monitor_key(m))
-            msgs.append(f"【監控達標】{h['name']} {d}\n目前 {fmt(cur['price'], cur['unit'])}"
-                        f"（門檻 < {m['max_price']:,}）{note}\n{url}".strip())
+            msgs.append(f"【{what}監控達標】{h['name']} {d}\n目前 {mon_fmt(m, cur, v)}"
+                        f"（門檻 < {thr}）{note}\n{url}".strip())
     return msgs
 
 

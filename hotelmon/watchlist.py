@@ -56,6 +56,8 @@ def _normalize(w: dict) -> dict:
                 x = {"hotel": m["hotel"], "date": str(m["date"]), "max_price": int(m["max_price"])}
                 if m.get("end") and str(m["end"]) > x["date"]:
                     x["end"] = str(m["end"])
+                if m.get("kind") == "cash":   # 現金門檻（台幣）；預設是點數門檻
+                    x["kind"] = "cash"
                 monitors.append(x)
         except (TypeError, ValueError):
             continue
