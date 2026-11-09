@@ -86,12 +86,6 @@ def _third_party(cfg, h, row) -> bool:
     return h["chain"] == "marriott" and not cfg.get("marriott_api") and row["note"] != OFFICIAL
 
 
-def _cash(row) -> str:
-    """通知裡附上同日現金價（萬豪含稅、IHG 未稅）。"""
-    c = row["cash"] if "cash" in row.keys() else None
-    return f"／現金 {row['cash_unit'] or ''} {c:,}" if c else ""
-
-
 def check_monitors(db, cfg, hotels_by_id) -> list[str]:
     """單日：低於門檻通知一次並完成。區間：每個低於門檻的日期各通知一次，區間結束前持續監控。"""
     msgs = []
@@ -113,7 +107,7 @@ def check_monitors(db, cfg, hotels_by_id) -> list[str]:
         url = build_url(h, date.fromisoformat(hits[0][0]), cfg.get("adults", 2)) if h["chain"] != "demo" else ""
         note = "\n資料來自 ustatz，可能不是最新，請到官網確認" if any(x[2] for x in hits) else ""
         if m.get("end"):
-            lines = "\n".join(f"{d} {fmt(c['price'], c['unit'])}{_cash(c)}" for d, c, _ in hits[:15])
+            lines = "\n".join(f"{d} {fmt(c['price'], c['unit'])}" for d, c, _ in hits[:15])
             more = f"\n…共 {len(hits)} 天" if len(hits) > 15 else ""
             msgs.append(f"【區間監控達標】{h['name']} {m['date']}～{m['end']}（門檻 < {m['max_price']:,}）\n"
                         f"{lines}{more}{note}\n{url}".strip())
@@ -121,7 +115,7 @@ def check_monitors(db, cfg, hotels_by_id) -> list[str]:
             d, cur, third = hits[0]
             if not third:
                 db.mark_sent(monitor_key(m))
-            msgs.append(f"【監控達標】{h['name']} {d}\n目前 {fmt(cur['price'], cur['unit'])}{_cash(cur)}"
+            msgs.append(f"【監控達標】{h['name']} {d}\n目前 {fmt(cur['price'], cur['unit'])}"
                         f"（門檻 < {m['max_price']:,}）{note}\n{url}".strip())
     return msgs
 

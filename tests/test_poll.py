@@ -536,11 +536,8 @@ assert alerts.check_monitors(dbr, cr, {"R": hr}) == []
 putr(5, 59000)
 m2 = alerts.check_monitors(dbr, cr, {"R": hr})
 assert len(m2) == 1 and "59,000" in m2[0] and "58,000" not in m2[0], m2
-dbr.save_quote(run.Quote("R", t1 + timedelta(days=6), 57000, "pts", "ok", cash=9000, cash_unit="TWD"), "2000-01-01")
-m3 = alerts.check_monitors(dbr, cr, {"R": hr})
-assert len(m3) == 1 and "57,000 點／現金 TWD 9,000" in m3[0], m3
 rep = run.report.build(dbr, {"monitors": [rm]}, [hr])["monitors"][0]
-assert (rep["cur"], rep["cur_date"], rep["end"], rep["src"]) == (57000, (t1 + timedelta(days=6)).isoformat(), rm["end"], "官網"), rep
-assert rep["state"] == "watch" and len(rep["hits"]) == 3
+assert (rep["cur"], rep["cur_date"], rep["end"], rep["src"]) == (58000, (t1 + timedelta(days=3)).isoformat(), rm["end"], "官網"), rep
+assert rep["state"] == "watch" and len(rep["hits"]) == 2
 
 print("poll 測試全部通過")

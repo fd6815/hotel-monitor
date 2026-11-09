@@ -937,7 +937,7 @@ function renderMon(){
     let cur = "尚無資料", gap = "", cls = "far";
     if (x) {
       if (x.s==="ok" && x.p!=null) {
-        cur = fmt(x.p, x.u) + (x.c!=null ? ` · ${twd(x.c)}` : "") + (m.end ? `（${r.d.slice(5)}）` : "");
+        cur = fmt(x.p, x.u) + (m.end ? `（${r.d.slice(5)}）` : "");
         const diff = x.p - m.max_price;
         if (diff < 0) { gap = m.end ? `${r.hits.length} 天低於門檻` : `低於門檻 ${(-diff).toLocaleString()} 點`; cls = "hit"; }
         else gap = `還差 ${diff.toLocaleString()} 點`;
@@ -975,8 +975,7 @@ function editMon(m){
     <div class="field"><label for="mTo">到</label><input id="mTo" type="date" min="${todayStr}" value="${to}"></div>`
       : `<div class="field"><label>日期</label><b>${m.date}</b></div>`}
     <div class="field"><label for="mThr">門檻（低於）</label><input id="mThr" type="number" inputmode="numeric" step="1000" value="${def}"></div>
-    ${r && r.x ? `<div class="hint">目前 ${r.x.s==="ok" ? fmt(r.x.p, r.x.u)+(isRange?`（${r.d}）`:"") : "搶空"} · ${r.src}${r.t?" · "+esc(r.t):""}
-      ${r.x.cn!=null ? `<br>現金（${isMarriott(m.hotel)?"含稅":"未稅"}）${esc(r.x.cu||"")} ${r.x.cn.toLocaleString()}　≈ ${twd(r.x.c)}` : "<br>現金：尚無資料"}</div>` : ""}
+    ${r && r.x ? `<div class="hint">目前 ${r.x.s==="ok" ? fmt(r.x.p, r.x.u)+(isRange?`（${r.d}）`:"") : "搶空"} · ${r.src}${r.t?" · "+esc(r.t):""}</div>` : ""}
     <div class="btns">${m ? '<button class="btn danger" id="mDel">刪除</button>' : ""}<button class="btn pri" id="mSave">${m ? "儲存" : "加入監控"}</button></div>
     <div class="btns">${m ? '<button class="btn" id="mCal">看日曆</button>' : ""}<button class="btn" id="sheetClose">關閉</button></div>`);
   $("#sheetClose").onclick = closeSheet;
