@@ -1,9 +1,7 @@
-"""查價前確認 NordVPN 沒開：VPN 的機房 IP 會被萬豪、IHG 擋（2026-11-09 查明）。"""
+"""查價前確認 NordVPN 沒開：VPN 的機房 IP 會被萬豪、IHG 擋（2026-11-09 查明）。
+NordVPN 8.15 的命令列斷線（NordVPN.exe／NordVPNApp.exe -d、--disconnect）實測無效，所以只偵測、寫 log。"""
 import subprocess
-import time
-from pathlib import Path
 
-NORD_EXE = Path(r"C:\Program Files\NordVPN\NordVPN.exe")
 _PS = ("Get-NetAdapter | Where-Object { $_.Status -eq 'Up' -and "
        "($_.InterfaceDescription -match 'NordLynx|NordVPN' -or $_.Name -match 'NordLynx|NordVPN') } "
        "| Measure-Object | Select-Object -ExpandProperty Count")
@@ -18,15 +16,8 @@ def nord_connected() -> bool:
         return False
 
 
-def ensure_off(wait=30) -> bool:
-    """NordVPN 連線中就斷線並等網路切回家用 IP。回傳是否有關掉 VPN。"""
-    if not NORD_EXE.exists() or not nord_connected():
-        return False
-    print("  [vpn] NordVPN 連線中，查價前先斷線")
-    subprocess.run([str(NORD_EXE), "-d"], timeout=30, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-    end = time.time() + wait
-    while time.time() < end and nord_connected():
-        time.sleep(2)
-    time.sleep(3)   # 等路由表、DNS 切回來
-    print(f"  [vpn] {'仍未斷線' if nord_connected() else '已斷線'}")
-    return True
+def warn_if_on() -> bool:
+    if nord_connected():
+        print("  [vpn] NordVPN 連線中：官網可能擋 VPN 的 IP，被擋請先關 VPN")
+        return True
+    return False

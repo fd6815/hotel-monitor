@@ -40,7 +40,7 @@ GitHub：`fd6815/hotel-monitor`（公開）。手機網頁：https://fd6815.gith
 - 電腦和手機會持續 commit 到 main，push 前先 `git pull --rebase`。改 `.github/workflows` 需要 token 有 Workflows 權限，目前沒有。
 
 ## 待辦
-1. 萬豪官網 11-04～11-09 每天第一次請求就被擋，原因是電腦開著 NordVPN（對外 IP 是 PacketHub 機房 IP，Akamai 會擋查價 API）；2026-11-09 21:30 關 VPN 後（中華電信 IP）月曆 API 回 200。**抓價時電腦和手機都不要開 VPN**（電腦：`hotelmon/vpn.py` 在 BrowserFetcher 開瀏覽器前偵測 NordLynx/NordVPN 網卡，連線中就執行 `NordVPN.exe -d` 斷線，不會自動重連）；再被擋先用 `curl -s https://ipinfo.io/json` 看 org 是不是 VPN。其他日期仍用 ustatz，ustatz 改版或停站時 `ustatz.fetch` 會失敗並傳 LINE。
+1. 萬豪官網 11-04～11-09 每天第一次請求就被擋，原因是電腦開著 NordVPN（對外 IP 是 PacketHub 機房 IP，Akamai 會擋查價 API）；2026-11-09 21:30 關 VPN 後（中華電信 IP）月曆 API 回 200。**抓價時電腦和手機都不要開 VPN**（電腦：`hotelmon/vpn.py` 在 BrowserFetcher 開瀏覽器前偵測 NordLynx/NordVPN 網卡，連線中只寫 log；NordVPN 8.15 命令列斷線無效，程式關不掉）；再被擋先用 `curl -s https://ipinfo.io/json` 看 org 是不是 VPN。其他日期仍用 ustatz，ustatz 改版或停站時 `ustatz.fetch` 會失敗並傳 LINE。
 5. 優惠來源「里程家」找不到網站，等使用者提供網址。
 2. 2026-11-02 00:22 的 poll 查台北洲際時瀏覽器中途關閉（Target page, context or browser has been closed），原因未查明，再發生要查。
 3. 監控門檻目前只有點數，可考慮加現金門檻。

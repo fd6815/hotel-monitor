@@ -244,7 +244,7 @@ class BrowserFetcher:
     async def __aenter__(self):
         from playwright.async_api import async_playwright
         from . import vpn
-        await asyncio.to_thread(vpn.ensure_off)   # VPN 機房 IP 會被官網擋
+        await asyncio.to_thread(vpn.warn_if_on)   # VPN 機房 IP 會被官網擋
         self._pw = await async_playwright().start()
         exe = find_browser(self.b.get("exe"))
         port = int(self.b.get("cdp_port", 9333))
