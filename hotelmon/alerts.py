@@ -2,6 +2,7 @@
 1. 指定日期監控：價格低於門檻 → 通知一次並標記「已完成」
 2. 收藏飯店降價／新開：與前一次抓取比較，降幅 ≥ drop_min 或由搶空變有房
 3. 抓取失敗：某飯店當天全部失敗（多半是被擋或網頁改版）→ 通知一次
+4. 一年內新低：收藏飯店未來一年最低點數創新低 → 通知一次並記為新紀錄（第一次只記錄不通知）
 """
 from datetime import date, datetime, timedelta
 
@@ -118,6 +119,38 @@ def check_drops(db, cfg, hotel, fetch_day: str) -> list[str]:
     if not lines:
         return []
     return [f"【降價】{hotel['name']}\n" + "\n".join(lines[:20]) + (f"\n…共 {len(lines)} 天" if len(lines) > 20 else "")]
+
+
+LOW_COVER_DAYS = 300   # 資料要涵蓋到這麼多天後，才算「一年內」（IHG 一年資料還沒抓到前不記錄）
+
+
+def check_year_low(db, cfg, hotel, today=None) -> list[str]:
+    """未來一年最低點數比紀錄（counters 表 low:<飯店>）還低 → 通知一次並更新紀錄；第一次只記錄。"""
+    if hotel.get("mode", "points") != "points" or hotel["chain"] == "demo":
+        return []
+    today = today or date.today()
+    end = (today + timedelta(days=365)).isoformat()
+    snaps = {d: v[0] for d, v in db.snapshots(hotel["id"], today.isoformat()).items() if d < end}
+    if not snaps or max(snaps) < (today + timedelta(days=LOW_COVER_DAYS)).isoformat():
+        return []
+    oks = {d: r for d, r in snaps.items() if r["status"] == "ok" and r["unit"] == "pts" and r["price"]}
+    if not oks:
+        return []
+    low = min(r["price"] for r in oks.values())
+    key = f"low:{hotel['id']}"
+    rec = db.counter(key)
+    if rec and low >= rec:
+        return []
+    db.set_counter(key, low)
+    if not rec:
+        print(f"  [新低] {hotel['name']} 一年內最低 {low:,} 點，記錄為基準")
+        return []
+    days = sorted(d for d, r in oks.items() if r["price"] == low)
+    third = hotel["chain"] == "marriott" and not cfg.get("marriott_api") and any(oks[d]["note"] != OFFICIAL for d in days)
+    note = "\n資料來自 ustatz，可能不是最新，請到官網確認" if third else ""
+    url = build_url(hotel, date.fromisoformat(days[0]), cfg.get("adults", 2))
+    return [f"【一年內新低】{hotel['name']}\n{fmt(low, 'pts')}（之前最低 {rec:,} 點）\n日期：{'、'.join(days[:8])}"
+            f"{' 等' if len(days) > 8 else ''}{note}\n{url}"]
 
 
 def check_errors(db, hotel, results, fetch_day) -> list[str]:

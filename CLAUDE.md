@@ -13,6 +13,9 @@ GitHub：`fd6815/hotel-monitor`（公開）。手機網頁：https://fd6815.gith
 ## 優惠情報（`hotelmon/deals.py`，關鍵字規則，不用 AI）
 每 30 分鐘隨 Watch 讀 RSS（config.yaml 的 `deals.feeds`）。網頁只留特價與優惠技巧；LINE 只傳 IHG／Avios／Alaska 點數特賣、bug 價、快速會籍匹配。翻譯用 Google 翻譯免費端點（非官方，失敗顯示原文）。
 
+## 一年內新低通知（`alerts.check_year_low`）
+收藏飯店（點數模式）未來 365 天的最低點數存在 db `counters` 表 `low:<飯店>`。資料要涵蓋到 300 天後才算；第一次只記錄不通知；之後比紀錄更低才傳 LINE「一年內新低」並更新紀錄（同價、最低那天被訂走都不通知）。daily／watch／poll 每次都檢查。
+
 ## 萬豪目前做法
 資料來源是第三方 ustatz.com（`hotelmon/ustatz.py`，一般 requests 可讀）：每間飯店每天 07:00 後讀一次，一次約 11 個月的點數與現金（含稅，IHG 是未稅），對方是預先抓好的，不一定最新。失敗照封鎖間隔重試。手機請求和切換月份都不觸發萬豪。監控日期另外每 8 小時用官網月曆 API 查一次（`update_marriott_official`，輪次從 07、15、23 點起算，同一輪每個日期只查一次；鍵 `maroff:<日>:<輪>:<飯店>:<日期>`）。失敗就傳 LINE、沿用 ustatz，下一輪再試；被封鎖則到下一個 07:00 前都不查（鍵 `maroff-blocked:<日>`，「日」從 07:00 算起）。只查點數，現金沿用 ustatz，`note` 記為「官網」。到價通知：官網來源通知一次就完成；ustatz 來源不結束監控，價格變了才再通知（鍵 `mon:...:<價格>`）。整段官網查價和逐日開頁的程式還留著（config `marriott_api: true` 才用）。
 
@@ -23,7 +26,7 @@ GitHub：`fd6815/hotel-monitor`（公開）。手機網頁：https://fd6815.gith
 | HotelMon Daily AM/PM | 07:13、19:13 | 週日第一次跑完整 60 天（`--full` 強制），其他時間等同 Watch | `data\daily.log` |
 | HotelMon Watch | :13、:43 | 只查監控日期（IHG 每 `ihg_watch_minutes`＝60 分鐘才查，鍵 `ihg-watch`）；沒資料的新飯店抓 60 天 | `data\watch.log` |
 
-電腦查 IHG：超過 3 天（`IHG_RANGE_MIN`）用月曆 API（`BrowserFetcher.ihg_range`，一次 31 天、只有點數、現金沿用前次，失敗改逐日）；監控日期仍逐日查（有現金）。間隔 `browser.ihg_delay_seconds`（3–6 秒），每天最多 `ihg_daily_cap`＝150 次（db `counters` 表 `calls:ihg:<日>`）。任一飯店被擋（`alerts.is_denied`：Access Denied／HTTP 403／429）就停掉這次同集團全部查詢，並算失敗、進入封鎖等待。pythonw 的 log 每行開頭有時間。
+電腦查 IHG：超過 3 天（`IHG_RANGE_MIN`）用月曆 API（`BrowserFetcher.ihg_range`，一次 31 天、只有點數、現金沿用前次，失敗改逐日）；監控日期仍逐日查（有現金）。IHG 未來一年每天 07:00 後由第一次 watch／daily 用月曆查一次（`ihg_year_due`，鍵 `ihg-year:<日>`，每間約 12 次請求，失敗下一次再試）。間隔 `browser.ihg_delay_seconds`（3–6 秒），每天最多 `ihg_daily_cap`＝150 次（db `counters` 表 `calls:ihg:<日>`）。任一飯店被擋（`alerts.is_denied`：Access Denied／HTTP 403／429）就停掉這次同集團全部查詢，並算失敗、進入封鎖等待。pythonw 的 log 每行開頭有時間。
 | HotelMon Poll | 每 1 分 | 處理手機請求，沒請求就安靜結束 | `data\poll.log` |
 
 ## 主要檔案

@@ -493,4 +493,29 @@ old = (datetime.now() - timedelta(days=31)).strftime("%Y-%m-%d %H:%M")
 db2.con.execute("UPDATE alerts_sent SET sent_at=? WHERE key='ihg-dir'", (old,)); db2.con.commit()
 run.refresh_ihg_dir(c2, db2)
 assert len(ups) == 2, ups
+# 一年內新低：資料涵蓋不到 300 天不記錄；第一次只記錄；更低才通知一次；同價或更高不通知
+dbl = DB(str(tmp / "low.db"))
+hl = {"id": "L", "name": "低價飯店", "chain": "ihg", "code": "LLL"}
+t0 = date.today()
+def put(i, p, day="2000-01-01", status="ok"):
+    dbl.save_quote(run.Quote("L", t0 + timedelta(days=i), p, "pts" if p else None, status), day)
+put(1, 60000); put(30, 55000)
+assert alerts.check_year_low(dbl, {}, hl) == [] and dbl.counter("low:L") == 0   # 只有 30 天資料
+put(320, 58000)
+assert alerts.check_year_low(dbl, {}, hl) == [] and dbl.counter("low:L") == 55000   # 第一次只記錄
+assert alerts.check_year_low(dbl, {}, hl) == []
+put(200, 50000, "2000-01-02")
+m = alerts.check_year_low(dbl, {}, hl)
+assert len(m) == 1 and "50,000" in m[0] and "55,000" in m[0] and dbl.counter("low:L") == 50000, m
+assert alerts.check_year_low(dbl, {}, hl) == []
+put(200, None, "2000-01-03", "sold_out")   # 最低那天被訂走，最低變回 55000：不通知
+assert alerts.check_year_low(dbl, {}, hl) == [] and dbl.counter("low:L") == 50000
+put(400, 10000)   # 一年以後的不算
+assert alerts.check_year_low(dbl, {}, hl) == []
+# IHG 一年資料每天 07:00 後一次
+assert not run.ihg_year_due(dbl, datetime.now().replace(hour=6))
+assert run.ihg_year_due(dbl, datetime.now().replace(hour=8))
+dbl.mark_sent(f"ihg-year:{date.today()}")
+assert not run.ihg_year_due(dbl, datetime.now().replace(hour=8))
+
 print("poll 測試全部通過")

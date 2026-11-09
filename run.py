@@ -65,6 +65,7 @@ from hotelmon.alerts import OFFICIAL
 from hotelmon.fetchers import BrowserFetcher, DemoFetcher, Quote
 
 IHG_RANGE_MIN = 3   # IHG 超過這麼多天就改用月曆 API
+YEAR_DAYS = 365     # IHG 每天查未來一年
 
 
 def load(path):
@@ -330,6 +331,12 @@ def ihg_watch_due(cfg, db, now=None):
     return not last or now - datetime.strptime(last, "%Y-%m-%d %H:%M") >= gap
 
 
+def ihg_year_due(db, now=None):
+    """IHG 未來一年每天 07:00 後查一次（月曆 API，每間約 12 次請求）；失敗下一次 watch 再試。"""
+    now = now or datetime.now()
+    return now.hour >= 7 and not db.was_sent(f"ihg-year:{now.date()}")
+
+
 def weekly_full_due(db, today=None):
     """週日第一次 daily 才跑完整 60 天；排程一天兩次，跑完後第二次就只查監控日期。"""
     today = today or date.today()
@@ -457,6 +464,7 @@ def poll(a, cfg, db, hotels, by_id, pending):
             msgs += alerts.check_monitors(db, cfg, by_id)
             for h in hotels:
                 msgs += alerts.check_errors(db, h, results.get(h["id"], []), a.fetch_day)
+                msgs += alerts.check_year_low(db, cfg, h)
                 if full and h["id"] in results:
                     msgs += alerts.check_drops(db, cfg, h, a.fetch_day)
         finished = 0
@@ -497,12 +505,20 @@ def run_cmd(a, cfg, db, hotels, by_id):
                 db.mark_sent("ihg-watch")
             else:   # IHG 監控日期每 ihg_watch_minutes 才查；還沒資料的新飯店照抓
                 browser_hotels = [h for h in browser_hotels if h["chain"] != "ihg" or not db.last_fetch(h["id"])]
-        results.update(asyncio.run(collect(cfg, db, browser_hotels, a.cmd, a.fetch_day)))
+        targets = {h["id"]: target_dates(cfg, h, a.cmd, db) for h in browser_hotels}
+        year = ihg_year_due(db) and [h for h in browser_hotels if h["chain"] == "ihg" and not h.get("url_template")
+                                     and h.get("mode", "points") == "points"]
+        for h in year or []:   # IHG 每天一次用月曆查未來一年（同萬豪 ustatz 每天更新、一年內最低價通知用）
+            targets[h["id"]] = sorted(set(targets[h["id"]]) | {date.today() + timedelta(days=i) for i in range(YEAR_DAYS)})
+        results.update(asyncio.run(collect(cfg, db, browser_hotels, a.cmd, a.fetch_day, targets)))
+        if year and all(results.get(h["id"]) and not alerts.hotel_failed(results[h["id"]]) for h in year):
+            db.mark_sent(f"ihg-year:{date.today()}")
         msgs += asyncio.run(update_marriott_official(cfg, db, hotels, a.fetch_day))
         alerts.update_blocks(db, hotels, results)
         msgs += alerts.check_monitors(db, cfg, by_id)
         for h in hotels:
             msgs += alerts.check_errors(db, h, results.get(h["id"], []), a.fetch_day)
+            msgs += alerts.check_year_low(db, cfg, h)
             if a.cmd == "daily":
                 msgs += alerts.check_drops(db, cfg, h, a.fetch_day)
     if a.cmd in ("daily", "watch"):

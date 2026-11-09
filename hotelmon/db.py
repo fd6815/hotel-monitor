@@ -95,6 +95,10 @@ class DB:
         r = self.con.execute("SELECT n FROM counters WHERE key=?", (key,)).fetchone()
         return r["n"] if r else 0
 
+    def set_counter(self, key: str, n: int):
+        self.con.execute("INSERT OR REPLACE INTO counters VALUES(?,?)", (key, int(n)))
+        self.con.commit()
+
     def bump(self, key: str):
         self.con.execute("INSERT INTO counters VALUES(?,1) ON CONFLICT(key) DO UPDATE SET n=n+1", (key,))
         self.con.commit()
