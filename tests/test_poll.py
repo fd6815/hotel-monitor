@@ -307,8 +307,8 @@ assert not db6.was_sent(alerts.monitor_key(c6["monitors"][0])) and db6.was_sent(
 db9 = DB(str(tmp / "q.db"))
 assert run.ihg_watch_due({}, db9)
 db9.mark_sent("ihg-watch")
-assert not run.ihg_watch_due({}, db9, datetime.now() + timedelta(minutes=100))
-assert run.ihg_watch_due({}, db9, datetime.now() + timedelta(minutes=112))
+assert not run.ihg_watch_due({}, db9, datetime.now() + timedelta(minutes=40))
+assert run.ihg_watch_due({}, db9, datetime.now() + timedelta(minutes=52))
 import io
 buf = io.StringIO()
 st = run._Stamped(buf)

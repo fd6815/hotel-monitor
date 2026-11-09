@@ -21,7 +21,7 @@ GitHub：`fd6815/hotel-monitor`（公開）。手機網頁：https://fd6815.gith
 | 名稱 | 時間 | 內容 | log |
 |---|---|---|---|
 | HotelMon Daily AM/PM | 07:13、19:13 | 週日第一次跑完整 60 天（`--full` 強制），其他時間等同 Watch | `data\daily.log` |
-| HotelMon Watch | :13、:43 | 只查監控日期（IHG 每 `ihg_watch_minutes`＝120 分鐘才查，鍵 `ihg-watch`）；沒資料的新飯店抓 60 天 | `data\watch.log` |
+| HotelMon Watch | :13、:43 | 只查監控日期（IHG 每 `ihg_watch_minutes`＝60 分鐘才查，鍵 `ihg-watch`）；沒資料的新飯店抓 60 天 | `data\watch.log` |
 
 電腦查 IHG：超過 3 天（`IHG_RANGE_MIN`）用月曆 API（`BrowserFetcher.ihg_range`，一次 31 天、只有點數、現金沿用前次，失敗改逐日）；監控日期仍逐日查（有現金）。間隔 `browser.ihg_delay_seconds`（3–6 秒），每天最多 `ihg_daily_cap`＝150 次（db `counters` 表 `calls:ihg:<日>`）。任一飯店被擋（`alerts.is_denied`：Access Denied／HTTP 403／429）就停掉這次同集團全部查詢，並算失敗、進入封鎖等待。pythonw 的 log 每行開頭有時間。
 | HotelMon Poll | 每 1 分 | 處理手機請求，沒請求就安靜結束 | `data\poll.log` |

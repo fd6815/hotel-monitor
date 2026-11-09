@@ -323,10 +323,10 @@ def main():
 
 
 def ihg_watch_due(cfg, db, now=None):
-    """Watch 每 30 分鐘跑，IHG 監控日期預設每 2 小時才查一次（排程時間會差一兩分鐘，留 10 分鐘彈性）。"""
+    """Watch 每 30 分鐘跑，IHG 監控日期預設每 1 小時才查一次（排程時間會差一兩分鐘，留 10 分鐘彈性）。"""
     last = db.was_sent("ihg-watch")
     now = now or datetime.now()
-    gap = timedelta(minutes=int(cfg.get("ihg_watch_minutes", 120)) - 10)
+    gap = timedelta(minutes=int(cfg.get("ihg_watch_minutes", 60)) - 10)
     return not last or now - datetime.strptime(last, "%Y-%m-%d %H:%M") >= gap
 
 
