@@ -543,7 +543,7 @@ function renderStatus(){
   const mine = PENDING.filter(p=>p.hotel===curHotel || p.type==="open");
   if (LIVE_JOBS.length){
     el.className = "status busy";
-    el.innerHTML = `<span class="dot"></span>查詢中：${LIVE_JOBS.map(j=>`${esc(hotelName(j.hid))} ${j.done}/${j.total}`).join("、")}`;
+    el.innerHTML = `<span class="dot"></span>查詢中：${LIVE_JOBS.map(j=>`${esc(hotelName(j.hid))}${j.cal ? "" : ` ${j.done}/${j.total}`}`).join("、")}`;
   } else if (PENDING.length){
     const p = PENDING[PENDING.length-1], mins = Math.max(0, Math.round((Date.now()-p.t)/60000));
     const what = p.type==="open" ? "開頁更新" : p.type==="daily" ? "完整更新" : `${hotelName(p.hotel)} ${p.month.replace("-"," 年 ")} 月`;
@@ -711,6 +711,7 @@ async function liveFetchNow(hid, dates){
   let fails=0, stop=false, rest=todo;
   if (todo.length > IHG_RANGE_MIN) {   // 多天：月曆 API 一次查一個月，現金沿用前次
     const ds = [...todo].sort(), dh = (dataHotel(hid)||{}).days||{};
+    job.cal = true; renderStatus();   // 一次查完，不顯示逐日進度
     try {
       for (let i=0; i<ds.length; ) {
         if (ihgStopReason()) { stop = true; break; }
@@ -728,7 +729,7 @@ async function liveFetchNow(hid, dates){
       rest = [];
     } catch(e) {
       if (e.blocked) { LS.set("hm-ihg-block", Date.now()+IHG_BLOCK_MS); stop = true; }
-      rest = ds.filter(d=>INFLIGHT.has(hid+d));   // 月曆壞了：剩下的逐日查
+      rest = ds.filter(d=>INFLIGHT.has(hid+d)); job.cal = false;   // 月曆壞了：剩下的逐日查
     }
     if (stop) rest = [];
   }
