@@ -62,6 +62,7 @@ for _s in (sys.stdout, sys.stderr):
 from hotelmon import alerts, deals, ihgdir, notify, publish, report, ustatz, watchlist
 from hotelmon.db import DB
 from hotelmon.alerts import OFFICIAL
+from hotelmon.watchlist import mon_dates
 from hotelmon.fetchers import BrowserFetcher, DemoFetcher, Quote
 
 IHG_RANGE_MIN = 3   # IHG 超過這麼多天就改用月曆 API
@@ -78,8 +79,7 @@ def load(path):
 
 def target_dates(cfg, hotel, mode, db=None):
     today = date.today()
-    mon = {date.fromisoformat(str(m["date"])) for m in cfg.get("monitors", [])
-           if m["hotel"] == hotel["id"] and str(m["date"]) >= today.isoformat()}
+    mon = {d for m in cfg.get("monitors", []) if m["hotel"] == hotel["id"] for d in mon_dates(m, today)}
     # 新加入、還沒有資料的飯店：watch 也抓完整日曆
     if mode == "watch" and not (db and db.last_fetch(hotel["id"])):
         mode = "daily"
@@ -127,12 +127,13 @@ async def update_marriott_official(cfg, db, hotels, fetch_day, now=None):
         return []
     targets = {}
     for m in cfg.get("monitors", []):
-        d = str(m["date"])
-        key = f"maroff:{shifted.date()}:{shifted.hour // 8}:{m['hotel']}:{d}"
-        if d >= now.date().isoformat() and any(h["id"] == m["hotel"] and h["chain"] == "marriott" for h in hotels) \
-                and not db.was_sent(key):
-            db.mark_sent(key)
-            targets.setdefault(m["hotel"], set()).add(date.fromisoformat(d))
+        if not any(h["id"] == m["hotel"] and h["chain"] == "marriott" for h in hotels):
+            continue
+        for dd in mon_dates(m, now.date()):
+            key = f"maroff:{shifted.date()}:{shifted.hour // 8}:{m['hotel']}:{dd}"
+            if not db.was_sent(key):
+                db.mark_sent(key)
+                targets.setdefault(m["hotel"], set()).add(dd)
     if not targets:
         return []
     failed = []
@@ -417,10 +418,8 @@ def request_targets(r, cfg, hotels, by_id, today):
         t.setdefault(h["id"], set()).update(ds)
     if r.get("type") == "open":
         for m in cfg.get("monitors", []):
-            d = str(m["date"])
-            if m["hotel"] in by_id and d >= today.isoformat() \
-                    and (not r.get("chains") or by_id[m["hotel"]]["chain"] in r["chains"]):
-                t.setdefault(m["hotel"], set()).add(date.fromisoformat(d))
+            if m["hotel"] in by_id and (not r.get("chains") or by_id[m["hotel"]]["chain"] in r["chains"]):
+                t.setdefault(m["hotel"], set()).update(mon_dates(m, today))
     # 萬豪每天排程查一次，手機請求不觸發
     return {k: v for k, v in t.items() if v and (cfg.get("marriott_api") or by_id[k]["chain"] != "marriott")}
 

@@ -518,4 +518,26 @@ assert run.ihg_year_due(dbl, datetime.now().replace(hour=8))
 dbl.mark_sent(f"ihg-year:{date.today()}")
 assert not run.ihg_year_due(dbl, datetime.now().replace(hour=8))
 
+# 區間監控：涵蓋日期都會查；每個低於門檻的日期各通知一次；data.json 取區間最低價
+from hotelmon.watchlist import _normalize, mon_dates
+t1 = date.today() + timedelta(days=5)
+rm = {"hotel": "R", "date": t1.isoformat(), "end": (t1 + timedelta(days=9)).isoformat(), "max_price": 60000}
+assert _normalize({"hotels": [{"id": "R", "chain": "ihg", "code": "RRR"}], "monitors": [rm]})["monitors"] == [rm]
+assert len(mon_dates(rm)) == 10 and len(mon_dates({**rm, "end": (t1 + timedelta(days=200)).isoformat()})) == 92
+cr = {"monitors": [rm]}
+hr = {"id": "R", "name": "區間飯店", "chain": "ihg", "code": "RRR"}
+assert set(run.target_dates(cr, hr, "watch", types.SimpleNamespace(last_fetch=lambda h: "x"))) == set(mon_dates(rm))
+dbr = DB(str(tmp / "range.db"))
+def putr(i, p): dbr.save_quote(run.Quote("R", t1 + timedelta(days=i), p, "pts", "ok"), "2000-01-01")
+putr(0, 65000); putr(3, 58000)
+m1 = alerts.check_monitors(dbr, cr, {"R": hr})
+assert len(m1) == 1 and "區間監控達標" in m1[0] and "58,000" in m1[0] and "65,000" not in m1[0], m1
+assert alerts.check_monitors(dbr, cr, {"R": hr}) == []
+putr(5, 59000)
+m2 = alerts.check_monitors(dbr, cr, {"R": hr})
+assert len(m2) == 1 and "59,000" in m2[0] and "58,000" not in m2[0], m2
+rep = run.report.build(dbr, {"monitors": [rm]}, [hr])["monitors"][0]
+assert (rep["cur"], rep["cur_date"], rep["end"], rep["src"]) == (58000, (t1 + timedelta(days=3)).isoformat(), rm["end"], "官網"), rep
+assert rep["state"] == "watch" and len(rep["hits"]) == 2
+
 print("poll 測試全部通過")

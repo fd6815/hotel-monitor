@@ -66,35 +66,57 @@ def fmt(price, unit):
 
 
 def monitor_key(m):
-    return f"mon:{m['hotel']}:{m['date']}:{m['max_price']}"
+    end = f"~{m['end']}" if m.get("end") else ""
+    return f"mon:{m['hotel']}:{m['date']}{end}:{m['max_price']}"
+
+
+def mon_rows(db, m, today=None) -> dict:
+    """監控涵蓋日期（今天以後）各自最新一筆資料 {日期: row}。"""
+    from .watchlist import mon_dates
+    out = {}
+    for d in mon_dates(m, today):
+        snaps = db.snapshots(m["hotel"], d.isoformat()).get(d.isoformat())
+        if snaps:
+            out[d.isoformat()] = snaps[0]
+    return out
+
+
+def _third_party(cfg, h, row) -> bool:
+    """萬豪資料來自 ustatz、可能過期：監控不結束，價格變了才再通知。"""
+    return h["chain"] == "marriott" and not cfg.get("marriott_api") and row["note"] != OFFICIAL
 
 
 def check_monitors(db, cfg, hotels_by_id) -> list[str]:
+    """單日：低於門檻通知一次並完成。區間：每個低於門檻的日期各通知一次，區間結束前持續監控。"""
     msgs = []
-    today = date.today().isoformat()
     for m in cfg.get("monitors", []):
-        d = str(m["date"])
-        if d < today or db.was_sent(monitor_key(m)):
-            continue
         h = hotels_by_id.get(m["hotel"])
-        if not h:
+        if not h or db.was_sent(monitor_key(m)):
             continue
-        snaps = db.snapshots(h["id"], d).get(d)
-        if not snaps:
-            continue
-        cur = snaps[0]
-        if cur["status"] == "ok" and cur["price"] is not None and cur["price"] < m["max_price"]:
-            url = build_url(h, date.fromisoformat(d), cfg.get("adults", 2)) if h["chain"] != "demo" else ""
-            # 萬豪資料來自第三方、可能過期：監控不結束，價格變了才再通知
-            third_party = h["chain"] == "marriott" and not cfg.get("marriott_api") and cur["note"] != OFFICIAL
-            key = f"{monitor_key(m)}:{cur['price']}" if third_party else monitor_key(m)
-            if db.was_sent(key):
+        hits = []
+        for d, cur in mon_rows(db, m).items():
+            if cur["status"] != "ok" or cur["price"] is None or cur["price"] >= m["max_price"]:
                 continue
-            note = "\n資料來自 ustatz，可能不是最新，請到官網確認" if third_party else ""
-            msgs.append(
-                f"【監控達標】{h['name']} {d}\n目前 {fmt(cur['price'], cur['unit'])}（門檻 < {m['max_price']:,}）{note}\n{url}".strip()
-            )
-            db.mark_sent(key)
+            third = _third_party(cfg, h, cur)
+            key = monitor_key(m) + (f":{d}" if m.get("end") else "") + (f":{cur['price']}" if third else "")
+            if not db.was_sent(key):
+                db.mark_sent(key)
+                hits.append((d, cur, third))
+        if not hits:
+            continue
+        url = build_url(h, date.fromisoformat(hits[0][0]), cfg.get("adults", 2)) if h["chain"] != "demo" else ""
+        note = "\n資料來自 ustatz，可能不是最新，請到官網確認" if any(x[2] for x in hits) else ""
+        if m.get("end"):
+            lines = "\n".join(f"{d} {fmt(c['price'], c['unit'])}" for d, c, _ in hits[:15])
+            more = f"\n…共 {len(hits)} 天" if len(hits) > 15 else ""
+            msgs.append(f"【區間監控達標】{h['name']} {m['date']}～{m['end']}（門檻 < {m['max_price']:,}）\n"
+                        f"{lines}{more}{note}\n{url}".strip())
+        else:
+            d, cur, third = hits[0]
+            if not third:
+                db.mark_sent(monitor_key(m))
+            msgs.append(f"【監控達標】{h['name']} {d}\n目前 {fmt(cur['price'], cur['unit'])}"
+                        f"（門檻 < {m['max_price']:,}）{note}\n{url}".strip())
     return msgs
 
 

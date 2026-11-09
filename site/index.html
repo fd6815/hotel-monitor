@@ -5,6 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0f6e6e">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="房價監控">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <title>房價監控</title>
 <style>
 :root{
@@ -75,7 +81,9 @@ nav.tabbar button.on{color:var(--accent)}
 .sum .meta{color:var(--muted);font-size:12.5px}
 .sum .best{text-align:right}
 .sum .best b{font-size:20px;color:var(--accent);font-variant-numeric:tabular-nums}
-.legend{display:flex;flex-wrap:wrap;gap:10px;color:var(--muted);font-size:12px;margin-top:10px}
+.legend{display:flex;flex-wrap:wrap;gap:10px;color:var(--muted);font-size:12px;margin-top:8px}
+.legend-box{margin-top:10px;font-size:12.5px;color:var(--muted)} .legend-box summary{cursor:pointer;list-style:none;user-select:none}
+.legend-box summary::-webkit-details-marker{display:none} .legend-box[open] summary{color:var(--ink)}
 .legend i{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-2px;margin-right:4px}
 .monthbar{display:flex;align-items:center;justify-content:space-between;margin:16px 0 8px}
 .monthbar h2{font-size:17px;margin:0;font-weight:600}
@@ -118,8 +126,9 @@ nav.tabbar button.on{color:var(--accent)}
 .btns .btn{flex:1;text-align:center;padding:10px;text-decoration:none}
 .field{display:flex;align-items:center;gap:8px;margin-top:12px}
 .field label{color:var(--muted);font-size:13px;white-space:nowrap}
-.field input{flex:1;min-width:0;border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:9px 10px;font-variant-numeric:tabular-nums}
+.field input,.field select{flex:1;min-width:0;border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:9px 10px;font-variant-numeric:tabular-nums}
 .tag{font-size:13px;white-space:nowrap}
+.mon-gap{font-size:12px;margin-top:2px} .mon-gap.hit{color:var(--down);font-weight:600} .mon-gap.far{color:var(--muted)}
 .tag.watch{color:var(--down)} .tag.done{color:var(--danger)} .tag.expired{color:var(--muted)} .tag.pending{color:var(--muted)}
 .toggle{position:relative;width:42px;height:24px;flex:none}
 .toggle input{opacity:0;width:0;height:0}
@@ -171,19 +180,23 @@ nav.tabbar button.on{color:var(--accent)}
   <section id="v-cal" class="hide">
     <div class="chips" id="chips"></div>
     <div class="card sum" id="sum"></div>
-    <div class="legend">
-      <span><i style="background:var(--lowest)"></i>最低</span><span><b>粗體</b>＝點數划算</span><span>現金為台幣未稅</span>
-      <span><i style="background:var(--low)"></i>偏低</span>
-      <span class="up">漲</span><span class="down">降、新開</span><span class="sold">搶空</span>
-      <span>粗框＝監控中</span><span>點日期可加監控</span><span>60 天後的月份切換時才查詢</span>
-    </div>
+    <details class="legend-box" id="legendBox">
+      <summary>ⓘ 圖例與資料來源</summary>
+      <div class="legend">
+        <span><i style="background:var(--lowest)"></i>最低</span><span><i style="background:var(--low)"></i>偏低</span>
+        <span><b>粗體</b>＝點數划算</span><span class="up">漲</span><span class="down">降、新開</span><span class="sold">搶空</span>
+        <span>粗框＝監控中</span><span>點日期看詳情、加監控</span>
+      </div>
+      <div class="hint" id="srcNote"></div>
+    </details>
     <div class="status" id="status"></div>
     <div id="cal"></div>
   </section>
 
   <!-- 監控 -->
   <section id="v-mon" class="hide">
-    <div class="hint">在「日曆」點日期即可新增監控；價格低於門檻時傳 LINE 通知一次，並標為已完成。</div>
+    <div class="hint">單日監控：在「日曆」點日期新增，低於門檻時 LINE 通知一次就完成。區間監控：期間內任一天低於門檻就通知，每天只通知一次，到期才結束。點一筆可改門檻。</div>
+    <div class="btns"><button class="btn pri" id="monAdd">＋ 新增區間監控</button></div>
     <div class="card" id="mon"></div>
   </section>
 
@@ -305,7 +318,7 @@ async function loadWatchlist(){
   } catch(e) {}
   // 讀不到就用 data.json 的內容
   WL = {hotels: DATA.hotels.map(h=>({id:h.id, chain:h.chain_id||"", code:h.code||"", name:h.name, city:h.city, mode:h.mode})),
-        monitors: DATA.monitors.map(m=>({hotel:m.hotel, date:m.date, max_price:m.max}))};
+        monitors: DATA.monitors.map(m=>({hotel:m.hotel, date:m.date, ...(m.end?{end:m.end}:{}), max_price:m.max}))};
   return false;
 }
 async function saveWatchlist(mutate, msg){
@@ -338,9 +351,13 @@ async function loadDir(){
 const wlHotel = id => WL.hotels.find(h=>h.id===id);
 const dataHotel = id => DATA.hotels.find(h=>h.id===id);
 const hotelName = id => (wlHotel(id)||dataHotel(id)||{name:id}).name;
+/* 監控：單日 {hotel,date,max_price}，區間多一個 end（含），最長 MAX_RANGE_DAYS 天 */
+const MAX_RANGE_DAYS = 92;
+const sameMon = (a,b) => a.hotel===b.hotel && a.date===b.date && (a.end||"")===(b.end||"");
+function monDates(m){ const ds=[], end=m.end||m.date; for (let d=m.date, i=0; d<=end && i<MAX_RANGE_DAYS; d=addDay(d,1), i++) if (d>=todayStr) ds.push(d); return ds; }
 function monState(m){
-  const dm = DATA.monitors.find(x=>x.hotel===m.hotel && x.date===m.date && x.max===m.max_price);
-  if (m.date < todayStr) return {state:"expired", dm};
+  const dm = DATA.monitors.find(x=>sameMon(x,m) && x.max===m.max_price);
+  if ((m.end||m.date) < todayStr) return {state:"expired", dm};
   if (dm && dm.state==="done") return {state:"done", dm};
   return {state: dm ? "watch" : "pending", dm};
 }
@@ -358,7 +375,7 @@ function show(v){
   view = v; LS.set("hm-view", v);
   document.querySelectorAll("nav.tabbar button").forEach(b=>b.classList.toggle("on", b.dataset.v===v));
   ["home","cal","mon","deal"].forEach(x=>$("#v-"+x).classList.toggle("hide", x!==v));
-  $("#pmode").classList.toggle("hide", v==="home");
+  $("#pmode").classList.toggle("hide", v!=="cal");   // 點數／現金切換只對日曆有用
   closeSheet(); window.scrollTo(0,0);
 }
 document.querySelectorAll("nav.tabbar button").forEach(b=>b.onclick=()=>{ show(b.dataset.v); if (b.dataset.v==="cal") maybeFetchMonth(); });
@@ -487,7 +504,7 @@ function renderCal(){
   const min = prices.length ? Math.min(...prices) : null, max = prices.length ? Math.max(...prices) : null;
   const lowCut = min!=null ? min + (max-min)*0.2 : null;
   const unit = ok.length ? ok[0][1].u : "pts";
-  const mons = new Set(WL.monitors.filter(m=>m.hotel===curHotel && !["expired","done"].includes(monState(m).state)).map(m=>m.date));
+  const mons = new Set(WL.monitors.filter(m=>m.hotel===curHotel && !["expired","done"].includes(monState(m).state)).flatMap(monDates));
   const best = ok.filter(([,x])=>metric(x)===min).map(([d])=>d);
   const vr = h && h.value_range;
   $("#sum").innerHTML = `<div><div class="name">${esc(wh.name||h?.name||curHotel)}</div>
@@ -538,8 +555,17 @@ function renderCal(){
 /* ---------- 請電腦即時更新 ---------- */
 let PENDING = (()=>{ try { return JSON.parse(LS.get("hm-pending","[]")); } catch(e){ return []; } })();
 function savePending(){ LS.set("hm-pending", JSON.stringify(PENDING)); }
+function renderSrcNote(){
+  const el = $("#srcNote"); if (!el) return;
+  el.textContent = isMarriott(curHotel)
+    ? "萬豪：監控日期每 8 小時查官網一次；其他日期來自 ustatz（PY的旅行大小事），電腦每天 07:00 後讀一次約 11 個月，對方預先抓好、不一定最新。現金為含稅價。"
+    : isLive(curHotel)
+    ? "IHG：電腦每天用官網月曆查未來一年、監控日期每小時查一次；手機打開月份時也會直接查官網（15 分鐘內不重查）。月曆只有點數，現金沿用之前查到的未稅價。"
+    : "資料由電腦定時查詢。";
+}
 function renderStatus(){
   const el = $("#status"); if (!el) return;
+  renderSrcNote();
   const mine = PENDING.filter(p=>p.hotel===curHotel || p.type==="open");
   if (LIVE_JOBS.length){
     el.className = "status busy";
@@ -559,7 +585,7 @@ function renderStatus(){
     el.className = "status"; el.textContent = `這支手機今天已查 IHG ${IHG_DAILY_CAP} 次，達上限，明天再查`;
   } else if (isMarriott(curHotel)) {
     const h = dataHotel(curHotel);
-    el.className = "status"; el.textContent = `萬豪監控日期每 8 小時查官網一次，其他日期來自 ustatz（PY的旅行大小事），每天讀取一次${h&&h.last?"，上次讀取 "+h.last.slice(5):""}（不是對方的資料時間）。訂房前請到官網確認`;
+    el.className = "status"; el.textContent = `萬豪：監控日期查官網，其他日期來自 ustatz${h&&h.last?"（讀取 "+h.last.slice(5)+"）":""}，訂房前請到官網確認`;
   } else if (curHotel && !isLive(curHotel) && monthNeedsFetch(curHotel, curMonth)) {
     el.className = "status";
     el.innerHTML = token() ? "這個月還沒查過" : `這個月還沒查過，<a href="#" id="needTok">設定 token</a> 後切換月份會自動查詢`;
@@ -603,9 +629,9 @@ async function doFetchMonth(){
 async function requestOnOpen(){
   if (recentlyRequested("hm-req:open", LIVE_TTL)) return;
   LS.set("hm-req:open", Date.now());
-  const mons = WL.monitors.filter(m=>m.date>=todayStr);
+  const mons = WL.monitors.filter(m=>(m.end||m.date)>=todayStr);
   for (const id of new Set(mons.filter(m=>isLive(m.hotel)).map(m=>m.hotel)))
-    liveFetch(id, mons.filter(m=>m.hotel===id).map(m=>m.date));   // 排隊依序查，不會同時發
+    liveFetch(id, [...new Set(mons.filter(m=>m.hotel===id).flatMap(monDates))]);   // 排隊依序查，不會同時發
   // 只剩 IHG 以外的飯店才需要電腦開瀏覽器
   const chains = pcChains(), curPc = curHotel && !isLive(curHotel) && !isMarriott(curHotel);
   if (!token() || !chains.length || (!curPc && !mons.some(m=>!isLive(m.hotel) && !isMarriott(m.hotel)))) return;
@@ -642,7 +668,7 @@ function isMarriott(id){ const h = id && (wlHotel(id)||dataHotel(id)); return !!
 function pcChains(){ return [...new Set(allHotels().filter(h=>!isLive(h.id) && !isMarriott(h.id)).map(h=>h.chain_id||h.chain))]; }
 function addDay(k, n){ const d=new Date(k+"T00:00"); d.setDate(d.getDate()+n); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; }
 function stamp(t){ const d=new Date(t); return `${addDay(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`,0)} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`; }
-function nextDays(id){ const ds=[]; for (let i=0;i<DAYS_AHEAD;i++) ds.push(addDay(todayStr,i)); return [...new Set([...ds, ...WL.monitors.filter(m=>m.hotel===id).map(m=>m.date)])]; }
+function nextDays(id){ const ds=[]; for (let i=0;i<DAYS_AHEAD;i++) ds.push(addDay(todayStr,i)); return [...new Set([...ds, ...WL.monitors.filter(m=>m.hotel===id).flatMap(monDates)])]; }
 function ihgUrl(h, d){
   const co=addDay(d,1), my=k=>String(+k.slice(5,7)-1).padStart(2,"0")+k.slice(0,4), path=h.ihg_path||`hotels/us/en/${h.code.toLowerCase()}`;
   return `https://www.ihg.com/${path}/hoteldetail/rooms?qCiD=${+d.slice(8)}&qCiMy=${my(d)}&qCoD=${+co.slice(8)}&qCoMy=${my(co)}&qAdlt=${DATA.adults||2}&qChld=0&qRms=1&qRtP=IVANI`;
@@ -842,7 +868,7 @@ function openDay(k){
   selDay = k; renderCal();
   const wh = wlHotel(curHotel)||{}, h = dataHotel(curHotel), x = h && h.days[k];
   const wd = "日一二三四五六"[new Date(k+"T00:00").getDay()];
-  const mon = WL.monitors.find(m=>m.hotel===curHotel && m.date===k);
+  const mon = WL.monitors.find(m=>m.hotel===curHotel && m.date===k && !m.end);
   let price = '<span class="muted">尚無資料</span>', change = "";
   if (x){
     if (x.s==="sold_out") price = `<span class="sold">搶空</span>`;
@@ -879,34 +905,99 @@ function openDay(k){
   $("#monSave").onclick = () => {
     const v = parseInt($("#thr").value, 10);
     if (!(v>0)) { toast("請輸入門檻"); return; }
-    saveWatchlist(w=>{ w.monitors = w.monitors.filter(m=>!(m.hotel===curHotel && m.date===k)); w.monitors.push({hotel:curHotel, date:k, max_price:v}); },
+    saveWatchlist(w=>{ w.monitors = w.monitors.filter(m=>!(m.hotel===curHotel && m.date===k && !m.end)); w.monitors.push({hotel:curHotel, date:k, max_price:v}); },
       `監控 ${hotelName(curHotel)} ${k} < ${v}`).then(ok=>{ if(ok) closeSheet(); });
   };
-  if ($("#monDel")) $("#monDel").onclick = () => saveWatchlist(w=>{ w.monitors = w.monitors.filter(m=>!(m.hotel===curHotel && m.date===k)); },
+  if ($("#monDel")) $("#monDel").onclick = () => saveWatchlist(w=>{ w.monitors = w.monitors.filter(m=>!(m.hotel===curHotel && m.date===k && !m.end)); },
       `刪除監控 ${hotelName(curHotel)} ${k}`).then(ok=>{ if(ok) closeSheet(); });
 }
 
 /* ---------- 監控 ---------- */
+/* 監控目前狀況：區間取最低價那天；IHG 用網頁直接查的結果（較新）；來源與查詢時間 */
+function monNow(m, dm){
+  const h = dataHotel(m.hotel), ds = monDates(m);
+  let best = null;
+  for (const d of ds){ const x = h && h.days[d]; if (x && x.s==="ok" && x.p!=null && (!best || x.p<best.x.p)) best = {d, x}; }
+  const anyD = ds.find(d=>h && h.days[d]);
+  const d = best ? best.d : (dm && dm.cur_date) || anyD || ds[0], x = best ? best.x : (h && d && h.days[d]) || null;
+  const live = LIVE[m.hotel] && d && LIVE[m.hotel][d];
+  const src = isLive(m.hotel) ? (live ? "手機查" : "官網") : ((x && x.n==="官網") || (dm && dm.src==="官網")) ? "官網" : isMarriott(m.hotel) ? "ustatz" : "官網";
+  const t = live ? stamp(live.t) : (dm && dm.t) || (h && h.last) || "";
+  const hits = ds.filter(k=>{ const y = h && h.days[k]; return y && y.s==="ok" && y.p!=null && y.p<m.max_price; });
+  return {d, x, src, t, hits, n: ds.length};
+}
 function renderMon(){
   const st = {watch:"監控中", pending:"等待抓價", done:"已完成", expired:"已過期"};
-  const list = [...WL.monitors].sort((a,b)=>a.date.localeCompare(b.date));
-  if (!list.length){ $("#mon").innerHTML = '<div class="empty-note">還沒有監控。到「每日房價」點日期即可新增</div>'; return; }
+  const list = [...WL.monitors].sort((a,b)=>a.date.localeCompare(b.date) || (a.end||"").localeCompare(b.end||""));
+  $("#monAdd").onclick = () => editMon(null);
+  if (!list.length){ $("#mon").innerHTML = '<div class="empty-note">還沒有監控。到「每日房價」點日期新增單日監控，或按上方新增區間監控</div>'; return; }
   $("#mon").innerHTML = list.map((m,i)=>{
-    const {state, dm} = monState(m);
-    const h = dataHotel(m.hotel), x = h && h.days[m.date];
-    const cur = x ? (x.s==="ok" ? fmt(x.p,x.u) : "搶空") : (dm && dm.cur!=null ? fmt(dm.cur, dm.unit) : "-");
-    return `<div class="row"><div class="main" data-goto="${i}" style="cursor:pointer">
-        <div class="t">${m.date.slice(5)}　${esc(hotelName(m.hotel))}</div>
-        <div class="s">門檻 &lt; ${m.max_price.toLocaleString()}　目前 ${cur}${dm&&dm.done_at?"　完成 "+esc(dm.done_at.slice(5)):""}</div></div>
+    const {state, dm} = monState(m), r = monNow(m, dm), x = r.x;
+    const when = m.end ? `${m.date.slice(5)}～${m.end.slice(5)}` : m.date.slice(5);
+    let cur = "尚無資料", gap = "", cls = "far";
+    if (x) {
+      if (x.s==="ok" && x.p!=null) {
+        cur = fmt(x.p, x.u) + (m.end ? `（${r.d.slice(5)}）` : "");
+        const diff = x.p - m.max_price;
+        if (diff < 0) { gap = m.end ? `${r.hits.length} 天低於門檻` : `低於門檻 ${(-diff).toLocaleString()} 點`; cls = "hit"; }
+        else gap = `還差 ${diff.toLocaleString()} 點`;
+      } else cur = m.end ? "全部搶空" : "搶空";
+    }
+    const meta = x ? `${r.src}${r.t ? " · "+esc(r.t.slice(5)) : ""}` : "";
+    return `<div class="row"><div class="main" data-edit="${i}" style="cursor:pointer">
+        <div class="t">${when}　${esc(hotelName(m.hotel))}${m.end?` <span class="muted" style="font-weight:400;font-size:12px">區間 ${r.n} 天</span>`:""}</div>
+        <div class="s">門檻 &lt; ${m.max_price.toLocaleString()}　目前 ${cur}</div>
+        ${meta || (dm&&dm.done_at) ? `<div class="s">${meta}${dm&&dm.done_at?"　完成 "+esc(dm.done_at.slice(5)):""}</div>` : ""}
+        ${gap && state!=="expired" && state!=="done" ? `<div class="mon-gap ${cls}">${gap}</div>` : ""}</div>
       <span class="tag ${state}">${st[state]}</span>
       <button class="btn ghost danger" data-mdel="${i}" aria-label="刪除">✕</button></div>`;
   }).join("");
-  $("#mon").querySelectorAll("[data-goto]").forEach(e=>e.onclick=()=>{ const m=list[+e.dataset.goto]; curHotel=m.hotel; LS.set("hm-hotel",curHotel); curMonth=m.date.slice(0,7); show("cal"); renderCal(); openDay(m.date); });
+  $("#mon").querySelectorAll("[data-edit]").forEach(e=>e.onclick=()=>editMon(list[+e.dataset.edit]));
   $("#mon").querySelectorAll("[data-mdel]").forEach(e=>e.onclick=()=>{
-    const m = list[+e.dataset.mdel];
-    if (!confirm(`刪除 ${m.date} ${hotelName(m.hotel)} 的監控？`)) return;
-    saveWatchlist(w=>{ w.monitors = w.monitors.filter(x=>!(x.hotel===m.hotel && x.date===m.date)); }, `刪除監控 ${hotelName(m.hotel)} ${m.date}`);
+    const m = list[+e.dataset.mdel], when = m.end ? `${m.date}～${m.end}` : m.date;
+    if (!confirm(`刪除 ${when} ${hotelName(m.hotel)} 的監控？`)) return;
+    saveWatchlist(w=>{ w.monitors = w.monitors.filter(x=>!sameMon(x,m)); }, `刪除監控 ${hotelName(m.hotel)} ${when}`);
   });
+}
+/* 新增或修改監控（m=null 為新增區間監控） */
+function editMon(m){
+  const hs = allHotels().filter(h=>(h.mode||"points")==="points");
+  if (!m && !hs.length) { toast("請先收藏飯店"); return; }
+  const isRange = !m || !!m.end, hid = m ? m.hotel : (curHotel && hs.some(h=>h.id===curHotel) ? curHotel : hs[0].id);
+  const r = m ? monNow(m, monState(m).dm) : null;
+  const from = m ? m.date : addDay(todayStr, 1), to = m ? (m.end||m.date) : addDay(todayStr, 30);
+  const def = m ? m.max_price : ((minOf(dataHotel(hid))||{}).min || 50000);
+  const opts = (m ? [{id:m.hotel}] : hs).map(h=>`<option value="${esc(h.id)}" ${h.id===hid?"selected":""}>${esc(hotelName(h.id))}</option>`).join("");
+  openSheet(`<h3>${m ? (isRange ? "區間監控" : "單日監控") : "新增區間監控"}</h3>
+    <div class="hint">${isRange ? `期間內任一天低於門檻就傳 LINE，每天只通知一次，到期才結束。最長 ${MAX_RANGE_DAYS} 天。` : "低於門檻時傳 LINE 通知一次，並標為已完成。"}</div>
+    <div class="field"><label for="mHotel">飯店</label><select id="mHotel" ${m?"disabled":""}>${opts}</select></div>
+    ${isRange ? `<div class="field"><label for="mFrom">從</label><input id="mFrom" type="date" min="${todayStr}" value="${from}"></div>
+    <div class="field"><label for="mTo">到</label><input id="mTo" type="date" min="${todayStr}" value="${to}"></div>`
+      : `<div class="field"><label>日期</label><b>${m.date}</b></div>`}
+    <div class="field"><label for="mThr">門檻（低於）</label><input id="mThr" type="number" inputmode="numeric" step="1000" value="${def}"></div>
+    ${r && r.x ? `<div class="hint">目前 ${r.x.s==="ok" ? fmt(r.x.p, r.x.u)+(isRange?`（${r.d}）`:"") : "搶空"} · ${r.src}${r.t?" · "+esc(r.t):""}</div>` : ""}
+    <div class="btns">${m ? '<button class="btn danger" id="mDel">刪除</button>' : ""}<button class="btn pri" id="mSave">${m ? "儲存" : "加入監控"}</button></div>
+    <div class="btns">${m ? '<button class="btn" id="mCal">看日曆</button>' : ""}<button class="btn" id="sheetClose">關閉</button></div>`);
+  $("#sheetClose").onclick = closeSheet;
+  if ($("#mCal")) $("#mCal").onclick = () => { curHotel = m.hotel; LS.set("hm-hotel", curHotel); curMonth = ((r && r.d) || m.date).slice(0,7); show("cal"); renderCal(); };
+  if ($("#mDel")) $("#mDel").onclick = () => saveWatchlist(w=>{ w.monitors = w.monitors.filter(x=>!sameMon(x,m)); },
+      `刪除監控 ${hotelName(m.hotel)} ${m.date}${m.end?"～"+m.end:""}`).then(ok=>{ if (ok) closeSheet(); });
+  $("#mSave").onclick = () => {
+    const v = parseInt($("#mThr").value, 10);
+    if (!(v>0)) { toast("請輸入門檻"); return; }
+    const h = $("#mHotel").value;
+    let nm;
+    if (isRange) {
+      const a = $("#mFrom").value, b = $("#mTo").value;
+      if (!a || !b || b < a) { toast("請確認日期：結束不能早於開始"); return; }
+      if (b < todayStr) { toast("結束日期已過"); return; }
+      if ((new Date(b) - new Date(a)) / 86400000 + 1 > MAX_RANGE_DAYS) { toast(`區間最長 ${MAX_RANGE_DAYS} 天`); return; }
+      nm = a===b ? {hotel:h, date:a, max_price:v} : {hotel:h, date:a, end:b, max_price:v};
+    } else nm = {hotel:h, date:m.date, max_price:v};
+    const when = nm.end ? `${nm.date}～${nm.end}` : nm.date;
+    saveWatchlist(w=>{ w.monitors = w.monitors.filter(x=>!(m && sameMon(x,m)) && !sameMon(x,nm)); w.monitors.push(nm); },
+      `監控 ${hotelName(h)} ${when} < ${v}`).then(ok=>{ if (ok) closeSheet(); });
+  };
 }
 
 /* ---------- 優惠 ---------- */
@@ -926,7 +1017,7 @@ function openSettings(msg){
     <div class="field"><input id="tok" type="password" placeholder="github_pat_…" autocomplete="off" value=""></div>
     <div class="btns">${has?'<button class="btn danger" id="tokDel">移除 token</button>':""}<button class="btn pri" id="tokSave">儲存並測試</button></div>
     <div class="sec-title" style="margin-top:18px">資料更新</div>
-    <div class="hint">IHG 由這個網頁直接查官網（不用 token，也不用開電腦），結果只存在這個瀏覽器，同一個月 15 分鐘內不重複查；一次查一天、間隔 1–2 秒，每天最多 150 次，被官網擋就停 2 小時。電腦每 2 小時查一次 IHG 監控日期。萬豪由電腦每 8 小時查一次官網（只查監控日期，被封鎖就等隔天），並每天 07:00 後讀一次 ustatz（PY的旅行大小事）約 11 個月的資料，對方資料不一定最新、現金為含稅價，訂房前請到官網確認；切換月份只看已存的資料。LINE 通知一律由電腦發送。「立即完整更新」只查目前打開的 IHG 飯店。</div>
+    <div class="hint">IHG：手機網頁直接查官網（不用 token），一次查整個月，結果只存在這個瀏覽器，15 分鐘內不重查；每天最多 150 次，被官網擋就停 2 小時。電腦每天查未來一年、監控日期每小時查一次。萬豪：電腦每 8 小時查一次官網（只查監控日期，被封鎖就等隔天），並每天 07:00 後讀一次 ustatz 約 11 個月的資料，對方不一定最新、現金為含稅價。查價時請關閉 VPN，VPN 的 IP 容易被官網擋。LINE 通知一律由電腦發送。「立即完整更新」只查目前打開的 IHG 飯店。</div>
     <div class="btns"><button class="btn" id="btnDaily">立即完整更新</button></div>
     <div class="btns"><button class="btn" id="sheetClose">關閉</button></div>`);
   $("#sheetClose").onclick = closeSheet;

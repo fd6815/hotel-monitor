@@ -4,7 +4,7 @@ import statistics
 from datetime import date
 from pathlib import Path
 
-from .alerts import blocked_chains, monitor_key
+from .alerts import OFFICIAL, blocked_chains, mon_rows, monitor_key
 from .db import now
 from .fetchers import build_url
 from . import fx
@@ -61,15 +61,24 @@ def build(db, cfg, hotels):
     by_id = {h["id"]: h for h in hotels}
     for m in sorted(cfg.get("monitors", []), key=lambda x: str(x["date"])):
         d = str(m["date"])
-        h = by_id.get(m["hotel"], {"name": m["hotel"]})
-        snaps = db.snapshots(m["hotel"], d).get(d) or []
-        cur = snaps[0] if snaps else None
+        h = by_id.get(m["hotel"], {"name": m["hotel"], "chain": ""})
+        rows = mon_rows(db, m)
+        oks = {k: r for k, r in rows.items() if r["status"] == "ok" and r["price"] is not None}
+        # 區間取最低價那天；單日就是那天
+        cd = min(oks, key=lambda k: (oks[k]["price"], k)) if oks else (min(rows) if rows else None)
+        cur = rows.get(cd) if cd else None
         done = db.was_sent(monitor_key(m))
+        last = m.get("end") or d
+        src = None
+        if cur:
+            src = OFFICIAL if cur["note"] == OFFICIAL or h.get("chain") != "marriott" else "ustatz"
         data["monitors"].append({
-            "date": d, "hotel": m["hotel"], "name": h["name"], "max": m["max_price"],
+            "date": d, "end": m.get("end"), "hotel": m["hotel"], "name": h["name"], "max": m["max_price"],
             "cur": cur["price"] if cur else None, "s": cur["status"] if cur else None,
-            "unit": cur["unit"] if cur else None, "key": monitor_key(m),
-            "state": "done" if done else ("expired" if d < today else "watch"), "done_at": done,
+            "unit": cur["unit"] if cur else None, "cur_date": cd, "src": src,
+            "t": cur["fetched_at"] if cur else None, "key": monitor_key(m),
+            "hits": sorted(k for k, r in oks.items() if r["price"] < m["max_price"]),
+            "state": "done" if done else ("expired" if last < today else "watch"), "done_at": done,
         })
     data["requests_done"] = [k[4:] for k in db.recent_keys("req:")]
     data["blocked"] = [{"chain": CHAIN_LABEL.get(c, c), "chain_id": c, "retry": t.strftime("%H:%M"),
