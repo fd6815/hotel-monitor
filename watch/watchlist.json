@@ -57,6 +57,12 @@
    "hotel": "ic-taipei",
    "date": "2026-12-05",
    "max_price": 65000
+  },
+  {
+   "hotel": "ihg-tpehs",
+   "date": "2027-04-09",
+   "end": "2027-04-13",
+   "max_price": 60000
   }
  ]
 }
