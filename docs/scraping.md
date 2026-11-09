@@ -13,6 +13,7 @@
 - 電腦：`IHG_JS` 在 ihg.com 頁面 fetch。網頁：`site/index.html` 的 `ihgQuote()` 直接 fetch（API 允許 fd6815.github.io 跨網域）。兩邊解析規則要一致。
 - `https://apis.ihg.com/availability/v3/hotels/offers?fieldset=rateDetails`，header `x-ihg-api-key: hsL8GAAz7drdIbEjBCejdA1Ud2MVhxoo`（官網前端公開金鑰）。
 - 積分＝`ratePlanCode=="IVANI"` 的 `rewardNights.pointsOnly.totalPoints`；現金＝其他 offer 的 `totalRate.amountBeforeTax` 最低值。HTTP 400 + "los" ＝最少住宿天數限制。
+- 月曆 API（超過 3 天時用，電腦 `ihg_range`／網頁 `ihgCalendar`）：`POST https://apis.ihg.com/availability/v1/calendar`，header `x-ihg-api-key: se9ym5iAzaW8pxfBjkmgbuGjJcr3Pj6Y`、`ihg-language: en-US`，body `{hotelMnemonics:[代碼], startDate, endDate（含）, lengthOfStay:1, guestCounts:[{otaCode:"AQC10",count:人數}], rates:{ratePlanCodes:["IVANI"]}, options:{...}}`。一次一間飯店、最多 31 天，跨網域可從 fd6815.github.io 呼叫。積分＝`data.hotels[].calendar[]` 中 IVANI offer 的 `checkInPoints` 最低值；沒有積分房的日期不會出現（視為無積分房）。現金不可靠，不用，沿用前次。來源：awardbuddy 開源外掛；2026-11-09 實測 12-22／12-23／12-28／12-29 與逐日查一致。
 
 ## 計算（`hotelmon/report.py`，網頁 `applyLive()`／`recalcHotel()` 同規則）
 - 標準房搶空只剩高階房：中位數 1.7 倍判定為 `premium`，網頁顯示「搶空」。

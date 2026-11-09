@@ -665,6 +665,23 @@ async function ihgQuote(code, d){
   const c = cash.length ? {cn:Math.min(...cash), cu:h.propertyCurrency||""} : {cn:null, cu:null};
   return pts.length ? {p:Math.min(...pts),s:"ok",u:"pts",n:"",...c} : {p:null,s:"sold_out",u:null,n:"無積分房",...c};
 }
+/* IHG 月曆 API：一次請求查最多 31 天點數（沒有現金），沒有積分房的日期不會出現 */
+const IHG_CAL_KEY = "se9ym5iAzaW8pxfBjkmgbuGjJcr3Pj6Y", IHG_RANGE_MIN = 3;
+async function ihgCalendar(code, start, end){
+  const body = {hotelMnemonics:[code], startDate:start, endDate:end, lengthOfStay:1, guestCounts:[{otaCode:"AQC10",count:DATA.adults||2}],
+    options:{includeSellStrategy:"followChannel", returnAmountsAfterTaxForLowestOffer:false, returnAverages:true, lowestOfferPerRatePlan:true, identifyLowestOfferPerRatePlan:true},
+    rates:{ratePlanCodes:["IVANI"]}};
+  const r = await fetch("https://apis.ihg.com/availability/v1/calendar", {method:"POST",
+    headers:{"content-type":"application/json; charset=UTF-8","accept":"application/json","x-ihg-api-key":IHG_CAL_KEY,"ihg-language":"en-US"}, body:JSON.stringify(body)});
+  if (r.status===403 || r.status===429) throw Object.assign(new Error("HTTP "+r.status), {blocked:true});
+  if (r.status!==200) throw new Error("HTTP "+r.status);
+  const pts = {};
+  for (const h of (await r.json()).data.hotels) for (const day of h.calendar||[]) {
+    const v = (day.offers||[]).filter(o=>o.ratePlanCode==="IVANI" && o.checkInPoints>0).map(o=>+o.checkInPoints);
+    if (day.start && v.length) pts[day.start] = Math.min(...v);
+  }
+  return pts;
+}
 /* IHG 防封鎖：被擋（403／429）就停 2 小時（電腦記錄的封鎖也算），每支手機每天最多查 IHG_DAILY_CAP 次 */
 const IHG_BLOCK_MS = 2*3600*1000, IHG_DAILY_CAP = 150;
 function ihgBlockedUntil(){
@@ -691,8 +708,31 @@ async function liveFetchNow(hid, dates){
   if (ihgStopReason()) { renderStatus(); return false; }
   todo.forEach(d=>INFLIGHT.add(hid+d));
   const job = {hid, done:0, total:todo.length}; LIVE_JOBS.push(job); renderStatus();
-  let fails=0, stop=false;
-  for (const d of todo){
+  let fails=0, stop=false, rest=todo;
+  if (todo.length > IHG_RANGE_MIN) {   // 多天：月曆 API 一次查一個月，現金沿用前次
+    const ds = [...todo].sort(), dh = (dataHotel(hid)||{}).days||{};
+    try {
+      for (let i=0; i<ds.length; ) {
+        if (ihgStopReason()) { stop = true; break; }
+        if (i) await new Promise(r=>setTimeout(r, 1000+Math.random()*1000));
+        const end = ds.filter(d=>d<=addDay(ds[i],30)).pop();
+        LS.set("hm-ihg-calls:"+todayStr, IHG_DAILY_CAP - ihgCallsLeft() + 1);
+        const pts = await ihgCalendar(wh.code, ds[i], end);
+        for (const d of ds.slice(i, ds.indexOf(end)+1)) {
+          const prev = out[d] || dh[d] || {}, c = {cn:prev.cn??null, cu:prev.cu??null};
+          out[d] = {...(pts[d] ? {p:pts[d],s:"ok",u:"pts",n:""} : {p:null,s:"sold_out",u:null,n:"無積分房"}), ...c, t:Date.now()};
+          INFLIGHT.delete(hid+d); job.done++;
+        }
+        i = ds.indexOf(end)+1;
+      }
+      rest = [];
+    } catch(e) {
+      if (e.blocked) { LS.set("hm-ihg-block", Date.now()+IHG_BLOCK_MS); stop = true; }
+      rest = ds.filter(d=>INFLIGHT.has(hid+d));   // 月曆壞了：剩下的逐日查
+    }
+    if (stop) rest = [];
+  }
+  for (const d of rest){
     if (fails>=3 || ihgStopReason()) { stop = true; break; }
     if (job.done) await new Promise(r=>setTimeout(r, 1000+Math.random()*1000));
     LS.set("hm-ihg-calls:"+todayStr, IHG_DAILY_CAP - ihgCallsLeft() + 1);

@@ -64,6 +64,8 @@ from hotelmon.db import DB
 from hotelmon.alerts import OFFICIAL
 from hotelmon.fetchers import BrowserFetcher, DemoFetcher, Quote
 
+IHG_RANGE_MIN = 3   # IHG 超過這麼多天就改用月曆 API
+
 
 def load(path):
     with open(path, encoding="utf-8") as f:
@@ -204,6 +206,35 @@ async def collect(cfg, db, hotels, mode, fetch_day, targets=None):
                     continue
                 counted = h["chain"] == "ihg"
                 calls_key = f"calls:ihg:{date.today()}"
+                # IHG 多天：月曆 API 一次查一個月（只有點數，現金沿用前次）；監控日期等少數日期仍逐日查（有現金）
+                if counted and len(dates) > IHG_RANGE_MIN and hasattr(f, "ihg_range") \
+                        and h.get("mode", "points") == "points" and not h.get("url_template"):
+                    if db.counter(calls_key) >= cap:
+                        print(f"  IHG 今天已查 {cap} 次，達上限，其餘日期明天再查")
+                        results[h["id"]] = []
+                        continue
+                    try:
+                        qs, n = await f.ihg_range(h, dates)
+                    except Exception as e:  # noqa: BLE001
+                        print(f"  [ihg] 月曆 API 失敗：{e!s:.120}")
+                        qs, n = None, 1
+                    for _ in range(n):
+                        db.bump(calls_key)
+                    if qs and alerts.is_denied(qs[0].note):
+                        print(f"  {h['name']} 被官網擋，這次先停止同集團全部查詢，保留前次資料")
+                        stopped.add(h["chain"])
+                        results[h["id"]] = qs
+                        continue
+                    if qs is not None:
+                        for q in qs:
+                            prev = db.snapshots(h["id"], q.stay_date.isoformat()).get(q.stay_date.isoformat())
+                            if prev:
+                                q.cash, q.cash_unit = prev[0]["cash"], prev[0]["cash_unit"]
+                            db.save_quote(q, fetch_day)
+                            print(f"  {h['name']} {q.stay_date} {q.status} {q.price or ''} [月曆]")
+                        results[h["id"]] = qs
+                        await asyncio.sleep(random.uniform(ilo, ihi))
+                        continue
                 for i, d in enumerate(dates, 1):
                     if counted and db.counter(calls_key) >= cap:
                         print(f"  IHG 今天已查 {cap} 次，達上限，其餘日期明天再查")

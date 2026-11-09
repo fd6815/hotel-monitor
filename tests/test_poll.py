@@ -2,6 +2,7 @@
 執行：.venv\\Scripts\\python.exe tests\\test_poll.py
 """
 import asyncio, sys, tempfile, types
+import json
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -106,6 +107,43 @@ def test_collect():
         res = asyncio.run(real_collect(c, tdb, ihg, "poll", args.fetch_day, {"i1": days, "i2": days}))
         assert FakeBrowser.last.fetch_calls == ["i1"] and not alerts.hotel_failed(res["i1"]), FakeBrowser.last.fetch_calls
         assert tdb.counter(f"calls:ihg:{date.today()}") == 3
+        # IHG 多天：月曆 API 一次查完，現金沿用前次；少數日期仍逐日查
+        c["ihg_daily_cap"] = 150
+        many = {date.today() + timedelta(days=i) for i in range(10)}
+        d0 = date.today()
+        tdb.save_quote(run.Quote("i1", d0, 90, "pts", "ok", cash=5000, cash_unit="TWD"), args.fetch_day)
+        class CalBrowser(FakeBrowser):
+            mode = "ok"
+            async def ihg_range(self, hotel, dates):
+                self.range_calls.append(hotel["id"])
+                if CalBrowser.mode == "denied":
+                    return [run.Quote(hotel["id"], d, None, None, "error", "IHG 月曆 API HTTP 403：Access Denied") for d in dates], 1
+                if CalBrowser.mode == "broken":
+                    return None, 1
+                return [run.Quote(hotel["id"], d, 80, "pts", "ok") for d in sorted(dates)], 1
+        run.BrowserFetcher = CalBrowser
+        n0 = tdb.counter(f"calls:ihg:{date.today()}")
+        res = asyncio.run(real_collect(c, tdb, ihg, "poll", args.fetch_day, {"i1": many, "i2": days}))
+        f = CalBrowser.last
+        assert f.range_calls == ["i1"] and f.fetch_calls == ["i2"] * 3, (f.range_calls, f.fetch_calls)
+        assert len(res["i1"]) == 10 and tdb.counter(f"calls:ihg:{date.today()}") == n0 + 4
+        row = tdb.snapshots("i1", d0.isoformat())[d0.isoformat()][0]
+        assert (row["price"], row["cash"], row["cash_unit"]) == (80, 5000, "TWD")
+        CalBrowser.mode = "broken"   # 月曆壞了：退回逐日
+        asyncio.run(real_collect(c, tdb, ihg[:1], "poll", args.fetch_day, {"i1": many}))
+        assert len(CalBrowser.last.fetch_calls) == 10
+        CalBrowser.mode = "denied"   # 被擋：同集團全停
+        res = asyncio.run(real_collect(c, tdb, ihg, "poll", args.fetch_day, {"i1": many, "i2": many}))
+        assert CalBrowser.last.range_calls == ["i1"] and CalBrowser.last.fetch_calls == []
+        assert alerts.hotel_failed(res["i1"]) and alerts.hotel_failed(res["i2"])
+        # 月曆回應解析：取 IVANI 最低點數，沒有積分房的日期不出現
+        from hotelmon.fetchers import parse_ihg_calendar
+        txt = json.dumps({"data": {"hotels": [{"calendar": [
+            {"start": "2026-12-01", "offers": [{"ratePlanCode": "IVANI", "checkInPoints": 52700},
+                                                {"ratePlanCode": "IVANI", "checkInPoints": 50000},
+                                                {"ratePlanCode": "IDAPF", "checkinAmount": "17800"}]},
+            {"start": "2026-12-02", "offers": [{"ratePlanCode": "IDAPF", "checkinAmount": "17800"}]}]}]}})
+        assert parse_ihg_calendar(txt) == {"2026-12-01": 50000}
     finally:
         FakeBrowser.fetch = real_fetch
         run.BrowserFetcher = saved

@@ -2,7 +2,8 @@
 
 - 萬豪：用本機一般 Chrome（非自動化模式，透過 CDP 連線）開官網房價頁，解析「Points / Stay」。
   萬豪的防機器人系統會擋 Playwright 自己啟動的瀏覽器，所以改用一般 Chrome。
-- IHG：在 ihg.com 頁面內直接呼叫官網 availability API，讀 rewardNights.pointsOnly.totalPoints。
+- IHG：在 ihg.com 頁面內直接呼叫官網 availability API，讀 rewardNights.pointsOnly.totalPoints；
+  多天時改用月曆 API（一次一個月，只有點數）。
 - 其他集團：開訂房頁，從頁面文字解析最低價格（需在 config 指定 url_template）。
 """
 import asyncio
@@ -30,6 +31,7 @@ class Quote:
 
 
 IHG_API_KEY = "hsL8GAAz7drdIbEjBCejdA1Ud2MVhxoo"   # ihg.com 網頁前端公開使用的金鑰
+IHG_CAL_KEY = "se9ym5iAzaW8pxfBjkmgbuGjJcr3Pj6Y"   # 月曆 API 用的金鑰（官網「view available dates」）
 
 TEMPLATES = {
     # 會自動轉到 rateListMenu.mi，列出各房型「Points / Stay」
@@ -141,6 +143,18 @@ IHG_JS = """async ([d1, d2, code, adults, key, rate]) => {
   return {status:r.status, text: await r.text()};
 }"""
 
+IHG_CAL_JS = """async ([code, start, end, adults, key]) => {
+  const body = {hotelMnemonics:[code], startDate:start, endDate:end, lengthOfStay:1,
+    guestCounts:[{otaCode:"AQC10",count:adults}],
+    options:{includeSellStrategy:"followChannel", returnAmountsAfterTaxForLowestOffer:false, returnAverages:true,
+      lowestOfferPerRatePlan:true, identifyLowestOfferPerRatePlan:true},
+    rates:{ratePlanCodes:["IVANI"]}};
+  const r = await fetch("https://apis.ihg.com/availability/v1/calendar", {method:"POST",
+    headers:{"content-type":"application/json; charset=UTF-8","accept":"application/json","x-ihg-api-key":key,"ihg-language":"en-US"},
+    body:JSON.stringify(body), credentials:"include"});
+  return {status:r.status, text: await r.text()};
+}"""
+
 
 MAR_CAL_QUERY = (Path(__file__).parent / "marriott_calendar.graphql").read_text(encoding="utf-8")
 MAR_CAL_SIG = "887375892e1ad2a43f46a9c95c55ea47cf6eca3af03331c2134f1b440cff3f9f"
@@ -186,6 +200,19 @@ def parse_ihg(hotel: dict, d: date, status: int, text: str) -> Quote:
     if cash:
         return Quote(hid, d, cash, cur, "ok", "未稅", cash=cash, cash_unit=cur)
     return Quote(hid, d, None, None, "sold_out")
+
+
+def parse_ihg_calendar(text: str) -> dict:
+    """月曆 API 回應 → {日期: 最低點數}；沒有積分房的日期不會出現。格式不對丟例外。"""
+    j = json.loads(text)
+    out = {}
+    for h in j["data"]["hotels"]:
+        for day in h.get("calendar") or []:
+            pts = [int(o["checkInPoints"]) for o in day.get("offers") or []
+                   if o.get("ratePlanCode") == "IVANI" and (o.get("checkInPoints") or 0) > 0]
+            if day.get("start") and pts:
+                out[day["start"]] = min(pts)
+    return out
 
 
 def _ihg_cash(h, offers, hotel):
@@ -335,11 +362,43 @@ class BrowserFetcher:
                 out.append(Quote(hotel["id"], d, None, None, "sold_out", "無積分房", cash=c, cash_unit=cu))
         return out
 
-    async def _ihg(self, hotel, d):
+    async def _ihg_open(self):
         if self.ihg_page is None:
             self.ihg_page = await self.ctx.new_page()
             await self.ihg_page.goto("https://www.ihg.com/hotels/us/en/reservation", wait_until="domcontentloaded", timeout=60000)
             await self.ihg_page.wait_for_timeout(5000)
+
+    async def ihg_range(self, hotel, dates):
+        """IHG 月曆 API：一次請求查最多 31 天的點數（現金由呼叫端沿用前次）。
+        回傳 (quotes, 請求次數)；被擋回傳 error quotes（note 含 HTTP 403）；其他失敗回傳 (None, 次數) 改逐日查。"""
+        await self._ihg_open()
+        want = sorted(set(dates))
+        points, calls, i = {}, 0, 0
+        while i < len(want):
+            start = want[i]
+            end = min(start + timedelta(days=30), want[-1])
+            res = await self.ihg_page.evaluate(IHG_CAL_JS, [hotel["code"], start.isoformat(), end.isoformat(),
+                                                            int(self.cfg.get("adults", 2)), IHG_CAL_KEY])
+            calls += 1
+            if res["status"] in (403, 429) or "access denied" in res["text"].lower():
+                note = f"IHG 月曆 API HTTP {res['status']}：Access Denied"
+                return [Quote(hotel["id"], d, None, None, "error", note) for d in want], calls
+            if res["status"] != 200:
+                print(f"  [ihg] 月曆 API HTTP {res['status']}：{res['text'][:120]}")
+                return None, calls
+            try:
+                points.update(parse_ihg_calendar(res["text"]))
+            except Exception:  # noqa: BLE001
+                print(f"  [ihg] 月曆回應異常：{res['text'][:150]}")
+                return None, calls
+            i = next((k for k, d in enumerate(want) if d > end), len(want))
+            if i < len(want):
+                await asyncio.sleep(random.uniform(2, 4))
+        return [Quote(hotel["id"], d, points[d.isoformat()], "pts", "ok") if d.isoformat() in points
+                else Quote(hotel["id"], d, None, None, "sold_out", "無積分房") for d in want], calls
+
+    async def _ihg(self, hotel, d):
+        await self._ihg_open()
         rate = "IVANI" if hotel.get("mode", "points") == "points" else "IGCOR"
         res = await self.ihg_page.evaluate(IHG_JS, [d.isoformat(), (d + timedelta(days=1)).isoformat(),
                                                     hotel["code"], int(self.cfg.get("adults", 2)),
