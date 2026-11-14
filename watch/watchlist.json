@@ -44,11 +44,6 @@
  ],
  "monitors": [
   {
-   "hotel": "nagoya-marriott",
-   "date": "2026-11-28",
-   "max_price": 60000
-  },
-  {
    "hotel": "ic-taipei",
    "date": "2026-12-06",
    "max_price": 64000
@@ -62,6 +57,11 @@
    "hotel": "ihg-tpehs",
    "date": "2027-04-09",
    "end": "2027-04-13",
+   "max_price": 60000
+  },
+  {
+   "hotel": "nagoya-marriott",
+   "date": "2026-11-28",
    "max_price": 60000
   }
  ]
