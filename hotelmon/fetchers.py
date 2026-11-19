@@ -122,6 +122,24 @@ def parse_price(text: str, hotel: dict):
     return min(found) if found else (None, None)
 
 
+PROFILE_JUNK = ["BrowserMetrics", "optimization_guide_model_store", "WasmTtsEngine", "component_crx_cache",
+                "extensions_crx_cache", "GrShaderCache", "ShaderCache", "Crashpad/reports"]
+CODE_CACHE_MAX = 80 * 1024 * 1024
+
+
+def clean_profile(prof: Path):
+    """開 Chrome 前清掉抓價用不到、會一直長大的檔案（每次開啟寫的統計檔、AI 模型、語音、元件下載）。
+    cookie 與登入狀態不動；Chrome 正在用的檔案刪不掉就略過。"""
+    import shutil
+    targets = [prof / p for p in PROFILE_JUNK]
+    code = prof / "Default" / "Code Cache"
+    if code.exists() and sum(f.stat().st_size for f in code.rglob("*") if f.is_file()) > CODE_CACHE_MAX:
+        targets.append(code)
+    for t in targets:
+        if t.exists():
+            shutil.rmtree(t, ignore_errors=True)
+
+
 def find_browser(cfg_path: str | None):
     if cfg_path and Path(cfg_path).exists():
         return cfg_path
@@ -250,11 +268,15 @@ class BrowserFetcher:
         port = int(self.b.get("cdp_port", 9333))
         prof = Path(self.b.get("profile_dir", "data/chrome-profile")).resolve()
         if exe:
+            clean_profile(prof)
             args = [exe, f"--remote-debugging-port={port}", f"--user-data-dir={prof}",
                     "--no-first-run", "--no-default-browser-check", "--window-size=1280,900",
                     "--disable-backgrounding-occluded-windows", "--disable-renderer-backgrounding",
                     "--disable-background-timer-throttling",
-                    "--disable-features=CalculateNativeWinOcclusion"]
+                    # 不讓設定檔越來越大：快取上限 50 MB、不自動下載元件與 AI 模型
+                    f"--disk-cache-size={50 * 1024 * 1024}", "--disable-component-update",
+                    "--disable-features=CalculateNativeWinOcclusion,OptimizationGuideModelDownloading,"
+                    "OptimizationHintsFetching,OptimizationTargetPrediction,OptimizationHints"]
             if self.b.get("offscreen", True):
                 args.append("--window-position=-2400,0")
             args.append("about:blank")
