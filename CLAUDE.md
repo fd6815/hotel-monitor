@@ -37,7 +37,7 @@ GitHub：`fd6815/hotel-monitor`（公開）。手機網頁：https://fd6815.gith
 - `tests/test_poll.py`：不連官網的測試。
 - `docs/scraping.md`：API 細節、計算規則、請求格式。**改抓價或請求邏輯時才讀。**
 - 不用讀：`site/hotels-marriott.json`、`site/hotels-ihg.json`、`site/data.json`（大檔）、`hotelmon/template.html`（只給 demo）、`data\archive\`（舊檔）。
-- 機密（只在電腦、不進 repo）：`data\github_token.txt`（2026-12-01 到期）、`data\line.json`。
+- 機密（只在電腦、不進 repo）：`data\github_token.txt`（2026-11-23 換新，含 Contents、Workflows 讀寫；舊的備份在 `.bak`）、`data\line.json`。
 
 ## 開發規則
 - **改完先跑測試，不要碰真實官網**：`.venv\Scripts\python.exe tests\test_poll.py`。萬豪查太快會被封鎖 1–2 小時，真的要測才查，一次就好。
