@@ -43,7 +43,7 @@ GitHub：`fd6815/hotel-monitor`（公開）。手機網頁：https://fd6815.gith
 - **改完先跑測試，不要碰真實官網**：`.venv\Scripts\python.exe tests\test_poll.py`。萬豪查太快會被封鎖 1–2 小時，真的要測才查，一次就好。
 - 網頁只改 `site/index.html` 需要的部分，用 Grep 找位置，不要整份讀。
 - 部署：電腦程式改完下一次排程就生效；手機網頁 push 後由 pages.yml 部署。git 在 `C:\Program Files\Git\cmd\git.exe`（新開的 shell 才有 PATH），credential helper（`scripts/git-credential.sh`）會讀 `data\github_token.txt`。
-- 電腦和手機會持續 commit 到 main，push 前先 `git pull --rebase`。改 `.github/workflows` 需要 token 有 Workflows 權限，目前沒有。
+- 電腦和手機會持續 commit 到 main，push 前先 `git pull --rebase`。改 `.github/workflows` 需要 token 有 Workflows 權限（2026-11-23 起有）。repo 的 `.git/config` 先清空 credential.helper 再用 `scripts/git-credential.sh`，避免 Windows 憑證管理員給舊 token。
 
 ## 待辦
 1. 萬豪官網 11-04～11-09 每天第一次請求就被擋，原因是電腦開著 NordVPN（對外 IP 是 PacketHub 機房 IP，Akamai 會擋查價 API）；2026-11-09 21:30 關 VPN 後（中華電信 IP）月曆 API 回 200。**抓價時電腦和手機都不要開 VPN**（電腦：`hotelmon/vpn.py` 在 BrowserFetcher 開瀏覽器前偵測 NordLynx/NordVPN 網卡，連線中只寫 log；NordVPN 8.15 命令列斷線無效，程式關不掉）；再被擋先用 `curl -s https://ipinfo.io/json` 看 org 是不是 VPN。其他日期仍用 ustatz，ustatz 改版或停站時 `ustatz.fetch` 會失敗並傳 LINE。
