@@ -21,11 +21,18 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: github-pages
-      url: ${{ steps.d.outputs.page_url }}
+      url: ${{ steps.d2.outputs.page_url || steps.d.outputs.page_url }}
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/upload-pages-artifact@v4
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: site
+      # GitHub 偶爾剛上傳完還查不到 artifact（No artifacts named "github-pages"），等一下再試
       - id: d
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
+        continue-on-error: true
+      - if: steps.d.outcome == 'failure'
+        run: sleep 30
+      - id: d2
+        if: steps.d.outcome == 'failure'
+        uses: actions/deploy-pages@v5
